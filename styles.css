@@ -550,3 +550,25 @@ body{background:var(--canvas)}
 .today-card .pause-options .no-break-button .no-break-star{font-size:26px;color:#f1a800}
 @media(max-width:375px){.today-card .point-grid .point-card .now-btn{min-height:104px}.today-card .point-grid .tap-label{font-size:17px}.today-card .quick-tiles .quick-tile{min-height:87px;font-size:10px}}
 @media print{.shell,.bottom-nav,.date-disclosure{display:none!important}}
+
+/* CHARRIAUT V12 — quatre durées de pause, sans étoile. */
+.pause-options, .today-card .pause-options {grid-template-columns:repeat(4,minmax(0,1fr))!important;}
+.today-card .quick-tiles #shortcutMeal {border:2px solid #dce5ef;background:#fff;transition:background .15s,border-color .15s,box-shadow .15s;min-height:92px;}
+.today-card .quick-tiles #shortcutMeal.meal-active {background:#fff0d8!important;border-color:#ee9216!important;box-shadow:inset 0 0 0 1px #f4a224,0 3px 10px #e58b1e2b!important;color:#7d4200;}
+.today-card .quick-tiles #shortcutMeal.meal-active .quick-symbol.meal {background:#f28a0b;box-shadow:0 0 0 3px #ffdf9b;}
+.today-card .quick-tiles #shortcutMeal:focus-visible {outline:3px solid #287ccb;outline-offset:2px;}
+.today-card .quick-tiles #shortcutMeal:disabled {opacity:.5;cursor:not-allowed;}
+
+/* CHARRIAUT V12 — Observations accessibles sur l’accueil */
+.today-card .observation-card {margin-top:12px;padding:13px 12px 11px;background:#fff;border:1px solid #dfeaf4;border-radius:15px;box-shadow:0 4px 16px #0d315a0c}
+.today-card .observation-heading {display:flex;align-items:center;gap:9px;font-size:15px;font-weight:850;color:#103b69;margin-bottom:9px}
+.today-card .observation-heading span {display:grid;place-items:center;background:#e4f2ff;color:#1769ad;border-radius:8px;font-size:19px;width:30px;height:30px}
+.today-card .observation-card textarea {display:block;width:100%;box-sizing:border-box;resize:vertical;min-height:80px;border:1px solid #cbdcec;border-radius:11px;background:#fafcff;color:#103859;padding:11px 12px;font-size:14px;line-height:1.45}
+.today-card .observation-card textarea:focus {border-color:#1376c9;outline:2px solid #afd6f9;outline-offset:1px}
+.today-card .observation-foot {display:flex;gap:8px;justify-content:space-between;flex-wrap:wrap;margin-top:7px;color:#6b8194;font-size:10px;line-height:1.35}
+.today-card .observation-foot #dayNoteStatus{font-weight:750;color:#237558}
+/* Les commentaires imprimés apparaissent réellement dans la colonne Observation. */
+@media print {
+  .print-sheet .p-month-table td.p-note {white-space:normal!important;max-width:none!important;overflow-wrap:anywhere!important;line-height:1.05!important;font-size:5.7pt!important}
+  .print-sheet.p-dense .p-month-table td.p-note {font-size:5.3pt!important;line-height:1.01!important}
+}

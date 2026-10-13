@@ -26,7 +26,7 @@
   let todayKey = dateKey(new Date());
   const timeNow = () => {const d=new Date();return `${pad(d.getHours())}:${pad(d.getMinutes())}`;};
   const blank = () => ({start:'',lunchOut:'',lunchIn:'',end:'',breakPlan:'',breakMode:'duration',breakMinutes:null,noBreak:false,note:'',off:false,meal:null,locations:{}});
-  const defaults = () => ({version:1,settings:{name:'',firstName:'',lastName:'',employeeEmail:'',recipient:'contact@charriaut.fr',creditEnabled:true,lastBackupAt:''},days:{},audit:{},leaves:[],vehicleChecks:{}});
+  const defaults = () => ({version:1,settings:{name:'',firstName:'',lastName:'',employeeEmail:'',recipient:'contact@charriaut.fr',lastBackupAt:''},days:{},audit:{},leaves:[],vehicleChecks:{}});
   function load() {
     try {
       const obj=JSON.parse(localStorage.getItem(STORAGE_KEY));
@@ -58,12 +58,11 @@
     // Existing days had manual lunch stamps. Keep their original calculation until
     // the employee explicitly switches that day to the new duration-based entry.
     if(!stored)return blank();
-    // Legacy '⭐' days already mean a genuine 0-minute break. Show them
-    // in the new duration selector without changing historical totals.
+    // Les anciens jours saisis à 0 minute restent à 0 minute après mise à jour.
     if(stored.noBreak&&!stored.breakMode)return {...blank(),...stored,breakMode:'duration',breakPlan:'custom',breakMinutes:0};
     return {...blank(),...stored,breakMode:stored.breakMode||'legacy',breakMinutes:stored.breakMode==='duration'?stored.breakMinutes:null};
   }
-  const AUDIT_LABELS={start:'Embauche matin',lunchOut:'Débauche midi',lunchIn:'Reprise après-midi',end:'Débauche soir',breakMinutes:'Durée de pause (minutes)',breakMode:'Mode de saisie du midi',noBreak:'Option étoile',meal:'Panier repas'};
+  const AUDIT_LABELS={start:'Embauche matin',lunchOut:'Débauche midi',lunchIn:'Reprise après-midi',end:'Débauche soir',breakMinutes:'Durée de pause (minutes)',breakMode:'Mode de saisie du midi',meal:'Panier repas'};
   function logChange(dayKey,field,previous,current){
     if(previous===current)return;
     const record={at:new Date().toISOString(),field,previous:String(previous||''),current:String(current||'')};
@@ -99,7 +98,7 @@
       const corrections=a.filter(e=>e.previous).length;
       const shown=c.off?(c.leaveType?leaveLabel(c.leaveType):'Non travaillée'):c.complete?duration(c.actual):'À compléter';
       const head=`${LONG_DAYS[dt.getDay()].charAt(0).toUpperCase()+LONG_DAYS[dt.getDay()].slice(1)} ${dt.getDate()}`;
-      return `<button type="button" class="archive-entry" data-edit-date="${key}"><span class="archive-date">${head}<small>${esc(key)}</small></span><span class="archive-times">${esc(d.start||'--:--')} → ${esc(d.end||'--:--')}<small>${shown}${d.noBreak?' ⭐':''}${corrections?' · ✎ Corrigé':''}</small></span><span class="archive-edit">Modifier ›</span></button>`;
+      return `<button type="button" class="archive-entry" data-edit-date="${key}"><span class="archive-date">${head}<small>${esc(key)}</small></span><span class="archive-times">${esc(d.start||'--:--')} → ${esc(d.end||'--:--')}<small>${shown}${corrections?' · ✎ Corrigé':''}</small></span><span class="archive-edit">Modifier ›</span></button>`;
     }).join(''):'<div class="archive-empty">Aucun pointage pour ce mois. Utilise « Aller à une date » pour en ajouter un.</div>';
     $('archiveList').querySelectorAll('[data-edit-date]').forEach(el=>el.addEventListener('click',()=>editDate(el.dataset.editDate)));
   }
@@ -170,24 +169,22 @@
       complete=start!=null&&end!=null&&validBreak;
       if(complete){pause=choice;invalid=end<=start||pause>=end-start;if(!invalid)actual=end-start-pause;}
     }
-    // Optional * marker shifts only the printed end time; it NEVER adds worked time.
-    const noPause=complete&&!invalid&&pause===0;
-    const credit=noPause&&state.settings.creditEnabled?20:0;
+    // Le relevé conserve uniquement l’heure de départ réellement saisie.
+    const credit=0;
     return {off:false,complete:complete&&!invalid,goal,actual,credit,effective:actual,pause,delta:actual==null?null:actual-goal,invalid};
   }
   function weekData(startWeek=activeWeek){
     const rows=Array.from({length:7},(_,i)=>{const key=dateKey(plusDays(dateFromKey(startWeek),i));return {key,d:getDay(key),calc:compute(key),day:i};});
     const completeRows=rows.filter(x=>x.calc.complete&&!x.calc.off);
     const actual=completeRows.reduce((sum,x)=>sum+x.calc.actual,0);
-    const credit=completeRows.reduce((sum,x)=>sum+x.calc.credit,0); // displayed sheet shift only
+    const credit=0;
     const effective=actual;
     const comparedGoal=rows.slice(0,5).filter(x=>x.calc.complete&&!x.calc.off).reduce((sum,x)=>sum+x.calc.goal,0);
     const weeklyReference=rows.slice(0,5).reduce((sum,x)=>sum+(x.calc.off?0:GOALS[x.day]),0);
     const gap=effective-weeklyReference;
     const allWeekdaysDone=rows.slice(0,5).every(x=>x.calc.complete);
     const anyOff=rows.slice(0,5).some(x=>x.calc.off);
-    const noBreakCount=completeRows.filter(x=>x.calc.pause===0).length;
-    return {rows,actual,credit,effective,comparedGoal,weeklyReference,gap,allWeekdaysDone,anyOff,noBreakCount,extra:allWeekdaysDone?Math.max(0,effective-2340):null};
+    return {rows,actual,credit,effective,comparedGoal,weeklyReference,gap,allWeekdaysDone,anyOff,extra:allWeekdaysDone?Math.max(0,effective-2340):null};
   }
   function dateRange(){
     const a=dateFromKey(activeWeek),b=plusDays(a,6);
@@ -285,18 +282,13 @@
       if(src){setLocation(el.dataset.copyPlace,src.type,src.site);toast('Lieu précédent repris ✓');}
     }));
     const isLegacy=d.breakMode==='legacy';
-    const isStarred=!isLegacy && d.breakMinutes===0;
-    const starButton=$('starNoBreak');
-    starButton.disabled=disabledDay;
-    starButton.classList.toggle('selected',isStarred);
-    starButton.setAttribute('aria-pressed',String(isStarred));
-    const currentPreset=d.breakMinutes===20?'20':d.breakMinutes===60?'60':d.breakMinutes===120?'120':d.breakMinutes===0?'star':'custom';
+    const currentPreset=d.breakMinutes===20?'20':d.breakMinutes===60?'60':d.breakMinutes===120?'120':'custom';
     $('pauseOptions').querySelectorAll('[data-break]').forEach(btn=>{
       const active=!isLegacy&&d.breakMinutes!==null&&btn.dataset.break===currentPreset || (!isLegacy&&d.breakPlan==='custom'&&d.breakMinutes===null&&btn.dataset.break==='custom');
       btn.classList.toggle('selected',active);btn.setAttribute('aria-pressed',String(active));btn.disabled=disabledDay;
     });
     const custom=$('customBreak');
-    custom.hidden=disabledDay||isLegacy||isStarred||!(d.breakPlan==='custom'||(d.breakMinutes!==null&&![20,60,120].includes(d.breakMinutes)));
+    custom.hidden=disabledDay||isLegacy||!(d.breakPlan==='custom'||(d.breakMinutes!==null&&![20,60,120].includes(d.breakMinutes)));
     $('customBreakMinutes').value=d.breakMinutes==null?'':String(d.breakMinutes);
     const legacy=$('legacyBreak');
     legacy.hidden=!isLegacy||disabledDay;
@@ -308,10 +300,10 @@
     if(disabledDay){info.className='pause-info';info.textContent=isLeave?`${leaveLabel(c.leaveType)} : aucun pointage nécessaire.`:'Cette journée est indiquée comme non travaillée.';}
     else if(isLegacy){info.className='pause-info';info.textContent='Ancienne saisie : le calcul utilise encore les heures exactes du midi. Choisis une durée pour simplifier cette journée.';}
     else if(d.breakMinutes===null){info.className='pause-info';info.textContent='Sélectionne la durée de pause réellement prise. Aucun horaire de midi à pointer.';}
-    else if(d.breakMinutes===0){info.className='pause-info warning';info.innerHTML=`⭐ Option sélectionnée.${c.credit&&d.end?` Heure indiquée sur le relevé : <strong>${clock(minutes(d.end)+20)}*</strong> ; départ réel enregistré : ${esc(d.end)}.`:''}`;}
+    else if(d.breakMinutes===0){info.className='pause-info warning';info.textContent='Durée enregistrée : 0 minute. Vérifie cette saisie dans les observations si nécessaire.';}
     else{info.className='pause-info'+(d.breakMinutes<20?' warning':'');info.innerHTML=`Pause enregistrée : <strong>${duration(d.breakMinutes)}</strong>.${d.breakMinutes<20?' ⚠ Pause inférieure à 20 minutes.':''} Pour la corriger, choisis une autre durée.`;}
     if(c.complete&&!c.off){
-      $('dayTotals').innerHTML=`<div class="total-item"><div class="total-label">Heures travaillées</div><div class="total-value">${duration(c.actual)}</div></div><div class="total-item"><div class="total-label">Écart / ${duration(c.goal)}</div><div class="total-value ${c.delta>0?'positive':c.delta<0?'negative':''}">${signed(c.delta)}</div></div><div class="wide">${c.pause===0?`⭐ Heure réelle de fin <strong>${esc(d.end)}</strong>${c.credit?`, heure ajustée sur feuille <strong>${clock(minutes(d.end)+20)}*</strong>`:''}. Aucun double comptage.`:`Pause déduite : <strong>${duration(c.pause)}</strong>. Travail réel : <strong>${duration(c.actual)}</strong>.`}</div>`;
+      $('dayTotals').innerHTML=`<div class="total-item"><div class="total-label">Heures travaillées</div><div class="total-value">${duration(c.actual)}</div></div><div class="total-item"><div class="total-label">Écart / ${duration(c.goal)}</div><div class="total-value ${c.delta>0?'positive':c.delta<0?'negative':''}">${signed(c.delta)}</div></div><div class="wide">Pause déduite : <strong>${duration(c.pause)}</strong>. Travail réel : <strong>${duration(c.actual)}</strong>.</div>`;
     }else{
       $('dayTotals').innerHTML=`<div class="total-item"><div class="total-label">Objectif du jour</div><div class="total-value">${duration(c.goal)}</div></div><div class="total-item"><div class="total-label">Travail enregistré</div><div class="total-value">${d.off?'Repos':'—'}</div></div><div class="wide">${c.invalid?'⚠ Vérifie l’ordre des horaires.':d.off?'Aucune heure comptabilisée, sans préjuger des heures rémunérées pour une absence.':'Il faut les heures d’embauche et de débauche, puis la durée de pause réellement prise.'}</div>`;
     }
@@ -321,22 +313,25 @@
     $('correctionNotice').textContent=corrected.length?`✎ ${corrected.length} correction${corrected.length>1?'s':''} enregistrée${corrected.length>1?'s':''} · dernière modification ${formatStamp(corrected[corrected.length-1].at)}.`:'';
     $('viewAudit').disabled=!history.length;
     updateLocationReminder(d);
-    $('dayNote').value=d.note;
-    $('dayNote').disabled=disabledDay;
+    $('dayNote').value=d.note || '';
+    $('dayNoteStatus').textContent=d.note?'Observation enregistrée ✓':'Enregistrement automatique';
     $('offDay').disabled=isLeave;
     $('offDay').textContent=isLeave?'Absence enregistrée dans Congés & RTT':d.off?'Remettre cette journée en travail':'Marquer cette journée non travaillée';
-    $('mealQuickStatus').textContent=d.meal===true?'Oui ✓':d.meal===false?'Non ✕':'À renseigner';
-    $('mealChoices').querySelectorAll('[data-meal]').forEach(btn=>{btn.disabled=disabledDay;const selectedMeal=d.meal===(btn.dataset.meal==='yes');btn.classList.toggle('selected',selectedMeal);btn.setAttribute('aria-pressed',String(selectedMeal));});
-    $('mealSection').classList.toggle('meal-disabled',disabledDay);
+    const mealButton=$('shortcutMeal');
+    const mealSelected=d.meal===true;
+    mealButton.classList.toggle('meal-active',mealSelected);
+    mealButton.setAttribute('aria-pressed',String(mealSelected));
+    mealButton.setAttribute('aria-label',mealSelected?'Panier repas : sélectionné. Appuyer pour annuler.':'Panier repas : non sélectionné. Appuyer pour ajouter.');
+    mealButton.disabled=disabledDay;
   }
   function renderSummary(w){
     const tile = (label,val)=>`<div class="tile"><div class="tile-label">${label}</div><div class="tile-value">${val}</div></div>`;
-    $('summaryTiles').innerHTML=tile('Heures travaillées',duration(w.actual))+tile('Repères ⭐',String(w.noBreakCount))+tile('Total retenu',duration(w.effective));
+    $('summaryTiles').innerHTML=tile('Heures travaillées',duration(w.actual))+tile('Objectif semaine',duration(w.weeklyReference))+tile('Solde semaine',w.allWeekdaysDone?signed(w.gap):'À compléter');
     $('weekRows').innerHTML=w.rows.map(({key,d,calc:c,day})=>{
       const pause=c.off?'—':c.pause===null?'—':duration(c.pause);
-      const desc=`${WEEKDAYS[day]} ${dateFromKey(key).getDate()}${c.pause===0&&c.complete?' ⭐':''}`;
-      const sheetEnd=c.off?'—':c.credit&&d.end?`${clock(minutes(d.end)+20)}*`:d.end||'—';
-      return `<tr><td>${desc}</td><td>${c.off?'Repos':duration(c.actual)}</td><td>${pause}</td><td class="star">${sheetEnd}</td><td class="${c.delta>0?'positive':c.delta<0?'negative':''}">${c.off?'—':signed(c.delta)}</td></tr>`;
+      const desc=`${WEEKDAYS[day]} ${dateFromKey(key).getDate()}`;
+      const sheetEnd=c.off?'—':d.end||'—';
+      return `<tr><td>${desc}</td><td>${c.off?'Repos':duration(c.actual)}</td><td>${pause}</td><td>${esc(sheetEnd)}</td><td class="${c.delta>0?'positive':c.delta<0?'negative':''}">${c.off?'—':signed(c.delta)}</td></tr>`;
     }).join('')+`<tr class="weekly-footer"><td><strong>Total</strong></td><td><strong>${duration(w.actual)}</strong></td><td>—</td><td>—</td><td class="${w.gap>0?'positive':w.gap<0?'negative':''}"><strong>${w.allWeekdaysDone?signed(w.gap):'À compléter'}¹</strong></td></tr>`;
     $('weekRows').parentElement.setAttribute('aria-label',`Semaine du ${dateRange()}`);
     let foot=$('weeklyBreakdown');
@@ -349,27 +344,23 @@
     if(d.off||leaveOn(selected)){toast('Cette journée est non travaillée.');return;}
     const legacy=d.breakMode==='legacy'&&(d.lunchOut||d.lunchIn);
     if(legacy&&!confirm('Passer à une durée de pause remplacera les deux anciens horaires du midi dans le calcul. Les modifications seront tracées. Continuer ?'))return;
-    const value=picked==='custom'?null:picked==='star'?0:Number(picked);
-    // L'étoile correspond à 0 minute de pause réelle, jamais à une pause fictive.
-    if(picked==='star')state.settings.creditEnabled=true;
-    setDay(selected,{breakMode:'duration',breakPlan:picked==='custom'?'custom':picked,breakMinutes:value,noBreak:value===0});
+    const value=picked==='custom'?null:Number(picked);
+    setDay(selected,{breakMode:'duration',breakPlan:picked,breakMinutes:value,noBreak:false});
     if(picked==='custom'){
       $('customBreakMinutes').focus();
       toast('Indique la durée réelle en minutes, puis valide.');
-    }else if(picked==='star')toast('⭐ Pause non prise enregistrée. Heure de sortie réelle conservée.');
-    else toast(`Pause de ${duration(value)} enregistrée ✓`);
+    }else toast(`Pause de ${duration(value)} enregistrée ✓`);
   }
   function dayText(row){
     const {key,d,calc:c,day}=row;
     const label=`${WEEKDAYS[day]} ${dateFromKey(key).getDate()}/${pad(dateFromKey(key).getMonth()+1)}`;
-    const leave=leaveOn(key);if(leave)return `${label} : ${leaveLabel(leave.type)}`;
+    const leave=leaveOn(key);if(leave)return `${label} : ${leaveLabel(leave.type)}${d.note?' — '+d.note:''}`;
     if(d.off)return `${label} : non travaillé${d.note?' — '+d.note:''}`;
     const start=`  Embauche : ${d.start||'—'}${d.start?' | '+locationLabel(getLocation(d,'start')):''}`;
     const end=`  Débauche réelle : ${d.end||'—'}${d.end?' | '+locationLabel(getLocation(d,'end')):''}`;
     const legacy=d.breakMode==='legacy'?` (horaires midi : ${d.lunchOut||'—'} / ${d.lunchIn||'—'})`:'';
     const result=c.complete?`Travail réel : ${duration(c.actual)} ; pause : ${duration(c.pause)}${legacy} ; écart journalier : ${signed(c.delta)}`:'Journée incomplète';
-    const equivalent=c.credit&&d.end?`\n  * Fin ajustée : ${clock(minutes(d.end)+20)}* (heure réelle ${d.end})`:'';
-    return `${label}\n${start}\n${end}\n  ${result}${equivalent}\n  Panier repas : ${d.meal===true?'Oui':d.meal===false?'Non':'Non renseigné'}${d.note?'\n  Note : '+d.note:''}`;
+    return `${label}\n${start}\n${end}\n  ${result}\n  Panier repas : ${d.meal===true?'Oui':'Non'}${d.note?'\n  Note : '+d.note:''}`;
   }
   function monthData(month=reportMonth){
     const [year,monthNumber]=month.split('-').map(Number);
@@ -386,17 +377,16 @@
     const delta=actual-comparedGoal;
     const target=rows.reduce((n,row)=>n+(row.day<5&&!row.calc.off?GOALS[row.day]:0),0);
     const incomplete=rows.filter(row=>row.day<5&&!row.calc.complete);
-    const meals=finished.filter(row=>row.d.meal===true).length;
+    const meals=rows.filter(row=>row.d.meal===true&&!row.calc.off).length;
     const leaves=rows.filter(row=>row.calc.leaveType);
     const net=actual-target;
     const vehicle=state.vehicleChecks[month]||{done:null,note:'',at:''};
-    const starCount=finished.filter(row=>row.calc.pause===0).length;
     const weeks=[...new Set(rows.map(row=>mondayOfKey(row.key)))].map(begin=>{
       const week=weekData(begin);
       const finish=dateKey(plusDays(dateFromKey(begin),6));
       return {...week,begin,finish,spansMonth:!begin.startsWith(month)||!finish.startsWith(month),weekNum:isoWeek(dateFromKey(begin))};
     });
-    return {month,label:`${MONTHS[monthNumber-1]} ${year}`,year,monthNumber,rows,printable,actual,comparedGoal,delta,target,net,incomplete,meals,leaves,vehicle,starCount,weeks};
+    return {month,label:`${MONTHS[monthNumber-1]} ${year}`,year,monthNumber,rows,printable,actual,comparedGoal,delta,target,net,incomplete,meals,leaves,vehicle,weeks};
   }
   function renderMonthSummary(){
     const m=monthData();
@@ -424,8 +414,8 @@
   }
   function csvExport(m){
     const q=value=>{const raw=String(value??'');const safe=/^[=+@\-\t\r]/.test(raw)?"'"+raw:raw;return `"${safe.replace(/"/g,'""')}"`;};
-    const rows=[['Date','Jour','Embauche','Lieu embauche','Pause (min)','Débauche réelle','Débauche ajustée (*)','Lieu débauche','Heures travaillées (min)','Écart jour (min)','Panier repas','Statut','Note']];
-    m.rows.forEach(({key,d,calc:c,day})=>rows.push([key,WEEKDAYS[day],c.off?'':d.start,c.off?'':locationLabel(getLocation(d,'start')),c.pause??'',c.off?'':d.end,c.credit&&d.end?clock(minutes(d.end)+20)+'*':'',c.off?'':locationLabel(getLocation(d,'end')),c.off?'':c.actual??'',c.off?'':c.delta??'',c.off?'':d.meal===true?'Oui':d.meal===false?'Non':'',c.leaveType?leaveLabel(c.leaveType):c.off?'Non travaillé':c.complete?'Complet':'Incomplet',d.note||'']));
+    const rows=[['Date','Jour','Embauche','Lieu embauche','Pause (min)','Débauche','Lieu débauche','Heures travaillées (min)','Écart jour (min)','Panier repas','Statut','Note']];
+    m.rows.forEach(({key,d,calc:c,day})=>rows.push([key,WEEKDAYS[day],c.off?'':d.start,c.off?'':locationLabel(getLocation(d,'start')),c.pause??'',c.off?'':d.end,c.off?'':locationLabel(getLocation(d,'end')),c.off?'':c.actual??'',c.off?'':c.delta??'',c.off?'':d.meal===true?'Oui':d.meal===false?'Non':'',c.leaveType?leaveLabel(c.leaveType):c.off?'Non travaillé':c.complete?'Complet':'Incomplet',d.note||'']));
     rows.push([]);
     rows.push(['TOTAL MOIS',m.label,'Heures travaillées (min)',m.actual,'Référence ajustée (min)',m.target,'Solde indicatif (min)',m.incomplete.length?'À compléter':m.net,'Paniers repas',m.meals,'Contrôle véhicule',m.vehicle.done===true?'Oui':m.vehicle.done===false?'Non':'Non renseigné']);
     rows.push(['Contrôle véhicule - observation',m.vehicle.note||'']);
@@ -439,8 +429,9 @@
     const rowHtml=({key,d,calc:c,day})=>{
       const dt=dateFromKey(key),edit=(state.audit[key]||[]).some(e=>e.previous)?' ✎':'';
       const isOff=c.off;
-      const out=c.credit&&d.end?`${clock(minutes(d.end)+20)}* <small class="p-star">Réel ${esc(d.end)}</small>`:esc(d.end||'—');
-      const status=c.leaveType?leaveLabel(c.leaveType):d.off?'Non travaillé':c.invalid?'À corriger':!c.complete?'À compléter':d.note||'';
+      const out=esc(d.end||'—');
+      const statusBase=c.leaveType?leaveLabel(c.leaveType):d.off?'Non travaillé':c.invalid?'À corriger':!c.complete?'À compléter':'';
+      const status=[statusBase,String(d.note||'').trim()].filter(Boolean).join(' · ');
       return `<tr class="${day>=5?'p-weekend':''} ${!c.complete&&!isOff?'p-unfinished':''}">
       <td class="p-date">${WEEKDAYS[day]} ${pad(dt.getDate())}${edit}</td>
       <td class="p-hour">${isOff?'—':esc(d.start||'—')}</td>
@@ -461,7 +452,7 @@
     const vehicleText=m.vehicle.done===true?'☑ Oui  ☐ Non':m.vehicle.done===false?'☐ Oui  ☑ Non':'☐ Oui  ☐ Non';
     const netBox=m.incomplete.length?'À compléter':m.net>0?`+${duration(m.net)}`:m.net<0?signed(m.net):'0h00';
     const netLabel=m.net>0?'Solde horaire positif du mois':m.net<0?'Heures en moins (solde du mois)':'Solde du mois';
-    $('printSheet').classList.toggle('p-dense',m.printable.length>22 || m.weeks.length>=6 || m.starCount>10);
+    $('printSheet').classList.toggle('p-dense',m.printable.length>22 || m.weeks.length>=6);
     $('printSheet').innerHTML=`<div class="p-month-header"><div class="p-month-brand"><img src="assets/logo-charriaut.png" alt="Logo Charriaut"><div><h1>RELEVÉ MENSUEL DES HEURES</h1><div class="p-month-title">CHARRIAUT · ${esc(m.label.toUpperCase())}</div></div></div><div class="p-month-person"><span><b>Nom :</b> ${esc(state.settings.lastName||'À renseigner')}</span><span><b>Prénom :</b> ${esc(state.settings.firstName||'À renseigner')}</span><span><b>E-mail :</b> ${esc(state.settings.employeeEmail||'À renseigner')}</span><span><b>Destinataire :</b> contact@charriaut.fr</span></div></div>
      <table class="p-month-table"><colgroup><col style="width:6%"><col style="width:8%"><col style="width:13%"><col style="width:7%"><col style="width:8%"><col style="width:13%"><col style="width:8%"><col style="width:8%"><col style="width:7%"><col style="width:22%"></colgroup><thead><tr><th>Date</th><th>Embauche</th><th>Lieu embauche</th><th>Pause</th><th>Débauche</th><th>Lieu débauche</th><th>Travail</th><th>Écart jour</th><th>Panier</th><th>Observation / Congés / RTT</th></tr></thead><tbody>${grid}</tbody></table>
      <div class="p-final-row"><div><small>Heures travaillées</small><b>${duration(m.actual)}</b></div><div><small>Base ajustée (congés / RTT)</small><b>${duration(m.target)}</b></div><div class="p-net"><small>${netLabel}</small><b>${netBox}</b></div><div><small>Paniers repas</small><b>${m.meals}</b></div></div>
@@ -499,10 +490,6 @@
   }
   $('vehicleChoices').querySelectorAll('[data-vehicle]').forEach(btn=>btn.addEventListener('click',()=>saveVehicle({done:btn.dataset.vehicle==='yes'})));
   $('vehicleNote').addEventListener('change',e=>saveVehicle({note:e.target.value.slice(0,180)}));
-  $('mealChoices').querySelectorAll('[data-meal]').forEach(btn=>btn.addEventListener('click',()=>{
-    if(leaveOn(selected)||getDay(selected).off){toast('Cette journée est non travaillée.');return;}
-    setDay(selected,{meal:btn.dataset.meal==='yes'});toast('Panier repas enregistré.');
-  }));
   function renderReminder(){
     const now=new Date();const last=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();
     const isLast=now.getDate()===last;
@@ -539,14 +526,19 @@
   $('nextWeek').addEventListener('click',()=>moveWeek(7));
   function moveWeek(n){activeWeek=dateKey(plusDays(dateFromKey(activeWeek),n));selected=activeWeek===mondayOfKey(todayKey)?todayKey:activeWeek;render();}
   $('pauseOptions').querySelectorAll('[data-break]').forEach(btn=>btn.addEventListener('click',()=>setBreak(btn.dataset.break)));
-  $('starNoBreak').addEventListener('click',()=>setBreak(getDay(selected).breakMode==='duration'&&getDay(selected).breakMinutes===0?'20':'star'));
   $('customBreakMinutes').addEventListener('change',e=>{
     const val=e.target.value.trim();
     if(val==='' || !/^\d+$/.test(val) || Number(val)>600){toast('Indique une durée entre 0 et 600 minutes.');return;}
-    setDay(selected,{breakMode:'duration',breakPlan:'custom',breakMinutes:Number(val),noBreak:Number(val)===0});
-    toast(Number(val)===0?'⭐ Option enregistrée':`Pause personnalisée de ${duration(Number(val))} enregistrée ✓`);
+    setDay(selected,{breakMode:'duration',breakPlan:'custom',breakMinutes:Number(val),noBreak:false});
+    toast(`Pause personnalisée de ${duration(Number(val))} enregistrée ✓`);
   });
-  $('dayNote').addEventListener('change',e=>setDay(selected,{note:e.target.value.slice(0,1500)}));
+  $('dayNote').addEventListener('input',e=>{
+    const text=e.target.value.slice(0,150);
+    const before=getDay(selected);
+    state.days[selected]={...before,note:text};
+    save();
+    $('dayNoteStatus').textContent=text?'Observation enregistrée ✓':'Enregistrement automatique';
+  });
   $('offDay').addEventListener('click',()=>{
     const d=getDay(selected);
     if(!d.off&&(d.start||d.end||d.lunchOut||d.lunchIn)&&!confirm('Marquer non travaillée ? Les horaires saisis seront conservés, mais ignorés dans le calcul.'))return;
@@ -585,7 +577,6 @@
     $('legacyNameNotice').hidden=!!(state.settings.firstName||state.settings.lastName)||!state.settings.name;
     $('legacyNameNotice').textContent=state.settings.name?`Ancien nom enregistré : ${state.settings.name}. Répartis-le dans les deux champs ci-dessus.`:'';
     $('recipient').value='contact@charriaut.fr';
-    $('creditEnabled').checked=state.settings.creditEnabled;
     const b=state.settings.lastBackupAt;
     $('backupState').textContent=b?`Dernière sauvegarde lancée : ${formatStamp(b)}. Conserve le fichier téléchargé.`:'Aucune sauvegarde enregistrée. Fais-en une chaque semaine.';
     $('settingsDialog').showModal();
@@ -602,7 +593,6 @@
     state.settings.lastName=nextLast;
     state.settings.employeeEmail=$('employeeEmail').value.trim().slice(0,180);
     state.settings.recipient='contact@charriaut.fr';
-    state.settings.creditEnabled=$('creditEnabled').checked;
     save();render();
   });
   function updateBackupDisplay(){
@@ -655,9 +645,14 @@
       todayKey=now;render();
     }
   });
-  // V11: raccourcis d’accueil et menu sans modifier les données locales.
+  // V12 : raccourcis et bouton panier à sélection directe, sans double saisie.
   const toPanel=(id)=>{const el=$(id);if(!el)return;el.scrollIntoView({behavior:'smooth',block:'start'});};
-  $('shortcutMeal').addEventListener('click',()=>{const el=$('mealSection');el.hidden=false;toPanel('mealSection');});
+  $('shortcutMeal').addEventListener('click',()=>{
+    if(leaveOn(selected)||getDay(selected).off){toast('Cette journée est non travaillée.');return;}
+    const active=getDay(selected).meal===true;
+    setDay(selected,{meal:!active});
+    toast(active?'Panier repas annulé.':'Panier repas ajouté ✓');
+  });
   $('shortcutPdf').addEventListener('click',()=>toPanel('monthCard'));
   $('shortcutHistory').addEventListener('click',()=>toPanel('archiveCard'));
   $('shortcutLeave').addEventListener('click',()=>toPanel('leaveCard'));
@@ -670,5 +665,5 @@
   const hasProfile=!!(state.settings.firstName&&state.settings.lastName&&state.settings.employeeEmail);
   if(!hasProfile){window.setTimeout(()=>{if(!$('settingsDialog').open)openSettings();},500);}
   // Export tested arithmetic to browser for optional on-device diagnostic (read-only).
-  window.Pointage39hVersion='11.0.0-CHARRIAUT-Entreprise-Design';
+  window.Pointage39hVersion='12.0.0-CHARRIAUT-Entreprise-Panier';
 })();

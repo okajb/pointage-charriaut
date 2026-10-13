@@ -1,5 +1,5 @@
-const CACHE='pointage39h-charriaut-entreprise-v11-design';
-const LOCAL_FILES=['./','./index.html','./styles.css?v=11','./app.js?v=11','./manifest.webmanifest','./assets/icon-192.png','./assets/icon-512.png','./assets/icon-180.png','./assets/logo-charriaut.png'];
+const CACHE='pointage39h-charriaut-entreprise-v12-panier';
+const LOCAL_FILES=['./','./index.html','./styles.css?v=12','./app.js?v=12','./manifest.webmanifest','./assets/icon-192.png','./assets/icon-512.png','./assets/icon-180.png','./assets/logo-charriaut.png'];
 self.addEventListener('install',event=>{event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(LOCAL_FILES)).then(()=>self.skipWaiting()));});
 self.addEventListener('activate',event=>{event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim()));});
 self.addEventListener('fetch',event=>{if(event.request.method!=='GET')return;const url=new URL(event.request.url);if(url.origin!==self.location.origin)return;if(url.pathname.endsWith('/')||url.pathname.endsWith('/index.html')){

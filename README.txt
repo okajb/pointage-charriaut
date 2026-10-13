@@ -1,4 +1,4 @@
-POINTAGE CHARRIAUT V11 · NOUVELLE INTERFACE · INSTALLATION GITHUB PAGES
+POINTAGE CHARRIAUT V12 · PANIER REPAS SIMPLIFIÉ · INSTALLATION GITHUB PAGES
 
 1. Depuis votre application actuelle : effectuez une sauvegarde JSON des horaires.
 2. Ouvrez https://github.com/okajb/pointage-charriaut
@@ -10,9 +10,11 @@ POINTAGE CHARRIAUT V11 · NOUVELLE INTERFACE · INSTALLATION GITHUB PAGES
 
 DANS CETTE VERSION
 - Design simplifié, deux grands boutons Embauche/Débauche, heure du téléphone.
-- Choix de pause 20 min / 1 h / 2 h / autre et bouton étoile seul.
+- Choix de pause 20 min / 1 h / 2 h / autre, sans étoile.
 - Lieux de début et de fin distincts : Bureau/Client + adresse.
-- Panier repas Oui/Non, Congés/RTT, historiques et corrections, sauvegarde JSON.
+- Panier repas : un appui pour l’ajouter, un autre pour l’annuler, sans Oui/Non affiché.
+- Congés/RTT, historique et corrections, sauvegarde JSON.
+- Observation du jour directement visible : saisie enregistrée automatiquement et inscrite dans la colonne Observation du PDF.
 - PDF mensuel A4 paysage : heures, écarts journaliers et hebdomadaires, paniers,
   congés/RTT, véhicule et bilan net mensuel.
 - Rappel pour contact@charriaut.fr. Envoi du PDF manuel comme pièce jointe.
@@ -22,3 +24,5 @@ Conserve le même stockage local que les versions antérieures : pas de migratio
 Faites une sauvegarde avant de changer de version. La publication GitHub ne transfère
 aucune information d’un salarié à un autre.
 Les vraies heures et la durée réelle des pauses demeurent dans les données et le bilan.
+
+V12 : les anciennes heures sont conservées. Les anciens marqueurs étoile sont ignorés ; seules les vraies heures saisies apparaissent sur les relevés.
