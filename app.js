@@ -63,7 +63,7 @@
     if(stored.noBreak&&!stored.breakMode)return {...blank(),...stored,breakMode:'duration',breakPlan:'custom',breakMinutes:0};
     return {...blank(),...stored,breakMode:stored.breakMode||'legacy',breakMinutes:stored.breakMode==='duration'?stored.breakMinutes:null};
   }
-  const AUDIT_LABELS={start:'Embauche matin',lunchOut:'Débauche midi',lunchIn:'Reprise après-midi',end:'Débauche soir',breakMinutes:'Durée de pause (minutes)',breakMode:'Mode de saisie du midi',noBreak:'Pause non prise',meal:'Panier repas'};
+  const AUDIT_LABELS={start:'Embauche matin',lunchOut:'Débauche midi',lunchIn:'Reprise après-midi',end:'Débauche soir',breakMinutes:'Durée de pause (minutes)',breakMode:'Mode de saisie du midi',noBreak:'Option étoile',meal:'Panier repas'};
   function logChange(dayKey,field,previous,current){
     if(previous===current)return;
     const record={at:new Date().toISOString(),field,previous:String(previous||''),current:String(current||'')};
@@ -223,25 +223,31 @@
     pill.className='pill'+(c.complete?'':c.invalid?' warn':' waiting');
     pill.textContent=isLeave?leaveLabel(c.leaveType):d.off?'Repos / absence':c.invalid?'Horaires à corriger':c.complete?'Journée complète':'À compléter';
     $('clientSuggestions').innerHTML=clientHistory().map(n=>`<option value="${esc(n)}"></option>`).join('');
-    $('pointGrid').innerHTML=FIELD_LIST.map((item,index)=>{
-      const disabled=disabledDay;
-      const needsPlace=needsLocation(item.key);
-      const loc=needsPlace?getLocation(d,item.key):EMPTY_LOCATION();
-      const reuse=needsPlace&&!!previousLocation(d,item.key)&&!locationReady(loc)&&!disabled;
-      const missing=needsPlace&&!!d[item.key]&&!locationReady(loc);
-      return `<div class="point-card ${disabled?'disabled':''}" data-point-card="${item.key}">
-        <div class="point-top"><div class="point-icon">${item.icon}</div><span class="point-title">${item.title}</span></div>
-        <div class="time-line"><input class="point-input" type="time" step="60" aria-label="Heure de ${item.title}" data-field="${item.key}" value="${esc(d[item.key])}" ${disabled?'disabled':''}><button type="button" class="now-btn" data-now="${item.key}" ${disabled?'disabled':''}>↗ Maintenant</button></div>
-        ${disabled||!needsPlace?'':`<div class="point-location">
-          <div class="location-caption">📍 Où ? ${missing?'<span class="location-required">À renseigner</span>':''}</div>
-          <div class="location-actions" role="group" aria-label="Lieu de ${item.title}">
-            <button type="button" class="location-choice ${loc.type==='bureau'?'active':''}" data-place="bureau" data-point="${item.key}" aria-pressed="${loc.type==='bureau'}">BUREAU</button>
-            <button type="button" class="location-choice ${loc.type==='client'?'active':''}" data-place="client" data-point="${item.key}" aria-pressed="${loc.type==='client'}">CLIENT</button>
-          </div>
-          ${loc.type==='client'?`<input class="client-site ${missing?'site-missing':''}" type="text" data-site="${item.key}" maxlength="160" autocomplete="off" list="clientSuggestions" aria-label="Commune ou adresse du client pour ${item.title}" placeholder="Ville ou adresse du client" value="${esc(loc.site)}">`:''}
-          ${reuse?`<button type="button" class="copy-location" data-copy-place="${item.key}">↳ Même lieu que précédemment</button>`:''}
-        </div>`}
+    $('pointGrid').innerHTML=FIELD_LIST.map(item=>{
+      const isStart=item.key==='start';
+      return `<div class="point-card ${isStart?'point-start':'point-end'} ${disabledDay?'disabled':''}" data-point-card="${item.key}">
+        <button type="button" class="now-btn" data-now="${item.key}" ${disabledDay?'disabled':''}>
+          <span class="tap-icon" aria-hidden="true">${isStart?'◷':'■'}</span>
+          <span class="tap-label">${item.title}</span>
+          <span class="tap-time">${esc(d[item.key]||'Appuyer pour pointer')}</span>
+        </button>
+        <label class="time-edit-label">${d[item.key]?'Modifier l’heure':'Saisie manuelle'}
+          <input class="point-input" type="time" step="60" aria-label="Heure de ${item.title}" data-field="${item.key}" value="${esc(d[item.key])}" ${disabledDay?'disabled':''}></label>
       </div>`;
+    }).join('');
+    $('locationGrid').innerHTML=FIELD_LIST.map(item=>{
+      const loc=getLocation(d,item.key);
+      const reuse=!!previousLocation(d,item.key)&&!locationReady(loc)&&!disabledDay;
+      const missing=!!d[item.key]&&!locationReady(loc);
+      return `<section class="point-card location-card ${disabledDay?'disabled':''}" data-point-card="${item.key}">
+        <h2 class="feature-heading"><span aria-hidden="true">●</span> Lieu ${item.key==='start'?'embauche':'débauche'} ${missing?'<small class="location-required">À renseigner</small>':''}</h2>
+        <div class="location-actions" role="group" aria-label="Lieu de ${item.title}">
+          <button type="button" class="location-choice ${loc.type==='bureau'?'active':''}" data-place="bureau" data-point="${item.key}" aria-pressed="${loc.type==='bureau'}" ${disabledDay?'disabled':''}>▥ &nbsp; Bureau</button>
+          <button type="button" class="location-choice ${loc.type==='client'?'active':''}" data-place="client" data-point="${item.key}" aria-pressed="${loc.type==='client'}" ${disabledDay?'disabled':''}>● &nbsp; Client</button>
+        </div>
+        ${loc.type==='client'?`<input class="client-site ${missing?'site-missing':''}" type="text" data-site="${item.key}" maxlength="160" autocomplete="off" list="clientSuggestions" aria-label="Commune ou adresse du client pour ${item.title}" placeholder="Commune ou adresse du chantier" value="${esc(loc.site)}" ${disabledDay?'disabled':''}>`:''}
+        ${reuse?`<button type="button" class="copy-location" data-copy-place="${item.key}">↳ Même lieu qu’à l’embauche</button>`:''}
+      </section>`;
     }).join('');
     $('pointGrid').querySelectorAll('[data-field]').forEach(el=>el.addEventListener('change',()=>setDay(selected,{[el.dataset.field]:el.value})));
     $('pointGrid').querySelectorAll('[data-now]').forEach(el=>el.addEventListener('click',()=>{
@@ -255,15 +261,16 @@
         }
         return;
       }
+      if(getDay(selected)[key] && !confirm('Remplacer l’heure '+getDay(selected)[key]+' par l’heure actuelle ?')) return;
       setDay(selected,{[key]:timeNow()});
       toast(locationReady(getLocation(getDay(selected),key))?'Heure et lieu enregistrés ✓':'Heure enregistrée ✓ Pense au lieu de pointage.');
     }));
-    $('pointGrid').querySelectorAll('[data-place]').forEach(el=>el.addEventListener('click',()=>{
+    $('locationGrid').querySelectorAll('[data-place]').forEach(el=>el.addEventListener('click',()=>{
       const {point,place}=el.dataset;
       setLocation(point,place);
-      if(place==='client'&&!getLocation(getDay(selected),point).site.trim())$('pointGrid').querySelector(`[data-site="${point}"]`)?.focus();
+      if(place==='client'&&!getLocation(getDay(selected),point).site.trim())$('locationGrid').querySelector(`[data-site="${point}"]`)?.focus();
     }));
-    $('pointGrid').querySelectorAll('[data-site]').forEach(el=>el.addEventListener('input',()=>{
+    $('locationGrid').querySelectorAll('[data-site]').forEach(el=>el.addEventListener('input',()=>{
       saveClientWhileTyping(el.dataset.site,el.value);
       el.classList.toggle('site-missing',!el.value.trim());
       const card=el.closest('.point-card');
@@ -273,7 +280,7 @@
       if(copy)copy.hidden=!!el.value.trim();
       updateLocationReminder(getDay(selected));
     }));
-    $('pointGrid').querySelectorAll('[data-copy-place]').forEach(el=>el.addEventListener('click',()=>{
+    $('locationGrid').querySelectorAll('[data-copy-place]').forEach(el=>el.addEventListener('click',()=>{
       const src=previousLocation(getDay(selected),el.dataset.copyPlace);
       if(src){setLocation(el.dataset.copyPlace,src.type,src.site);toast('Lieu précédent repris ✓');}
     }));
@@ -301,10 +308,10 @@
     if(disabledDay){info.className='pause-info';info.textContent=isLeave?`${leaveLabel(c.leaveType)} : aucun pointage nécessaire.`:'Cette journée est indiquée comme non travaillée.';}
     else if(isLegacy){info.className='pause-info';info.textContent='Ancienne saisie : le calcul utilise encore les heures exactes du midi. Choisis une durée pour simplifier cette journée.';}
     else if(d.breakMinutes===null){info.className='pause-info';info.textContent='Sélectionne la durée de pause réellement prise. Aucun horaire de midi à pointer.';}
-    else if(d.breakMinutes===0){info.className='pause-info warning';info.innerHTML=`⭐ Aucune pause prise. La pause minimale obligatoire n’a pas été effectuée. ${c.credit&&d.end?`Heure ajustée sur la feuille : <strong>${clock(minutes(d.end)+20)}*</strong>, avec heure réelle ${esc(d.end)} conservée.`:''}`;}
+    else if(d.breakMinutes===0){info.className='pause-info warning';info.innerHTML=`⭐ Option sélectionnée.${c.credit&&d.end?` Heure indiquée sur le relevé : <strong>${clock(minutes(d.end)+20)}*</strong> ; départ réel enregistré : ${esc(d.end)}.`:''}`;}
     else{info.className='pause-info'+(d.breakMinutes<20?' warning':'');info.innerHTML=`Pause enregistrée : <strong>${duration(d.breakMinutes)}</strong>.${d.breakMinutes<20?' ⚠ Pause inférieure à 20 minutes.':''} Pour la corriger, choisis une autre durée.`;}
     if(c.complete&&!c.off){
-      $('dayTotals').innerHTML=`<div class="total-item"><div class="total-label">Heures travaillées</div><div class="total-value">${duration(c.actual)}</div></div><div class="total-item"><div class="total-label">Écart / ${duration(c.goal)}</div><div class="total-value ${c.delta>0?'positive':c.delta<0?'negative':''}">${signed(c.delta)}</div></div><div class="wide">${c.pause===0?`⭐ Pause non prise. Heure réelle de fin <strong>${esc(d.end)}</strong>${c.credit?`, heure ajustée sur feuille <strong>${clock(minutes(d.end)+20)}*</strong>`:''}. Aucun double comptage.`:`Pause déduite : <strong>${duration(c.pause)}</strong>. Travail réel : <strong>${duration(c.actual)}</strong>.`}</div>`;
+      $('dayTotals').innerHTML=`<div class="total-item"><div class="total-label">Heures travaillées</div><div class="total-value">${duration(c.actual)}</div></div><div class="total-item"><div class="total-label">Écart / ${duration(c.goal)}</div><div class="total-value ${c.delta>0?'positive':c.delta<0?'negative':''}">${signed(c.delta)}</div></div><div class="wide">${c.pause===0?`⭐ Heure réelle de fin <strong>${esc(d.end)}</strong>${c.credit?`, heure ajustée sur feuille <strong>${clock(minutes(d.end)+20)}*</strong>`:''}. Aucun double comptage.`:`Pause déduite : <strong>${duration(c.pause)}</strong>. Travail réel : <strong>${duration(c.actual)}</strong>.`}</div>`;
     }else{
       $('dayTotals').innerHTML=`<div class="total-item"><div class="total-label">Objectif du jour</div><div class="total-value">${duration(c.goal)}</div></div><div class="total-item"><div class="total-label">Travail enregistré</div><div class="total-value">${d.off?'Repos':'—'}</div></div><div class="wide">${c.invalid?'⚠ Vérifie l’ordre des horaires.':d.off?'Aucune heure comptabilisée, sans préjuger des heures rémunérées pour une absence.':'Il faut les heures d’embauche et de débauche, puis la durée de pause réellement prise.'}</div>`;
     }
@@ -318,12 +325,13 @@
     $('dayNote').disabled=disabledDay;
     $('offDay').disabled=isLeave;
     $('offDay').textContent=isLeave?'Absence enregistrée dans Congés & RTT':d.off?'Remettre cette journée en travail':'Marquer cette journée non travaillée';
+    $('mealQuickStatus').textContent=d.meal===true?'Oui ✓':d.meal===false?'Non ✕':'À renseigner';
     $('mealChoices').querySelectorAll('[data-meal]').forEach(btn=>{btn.disabled=disabledDay;const selectedMeal=d.meal===(btn.dataset.meal==='yes');btn.classList.toggle('selected',selectedMeal);btn.setAttribute('aria-pressed',String(selectedMeal));});
     $('mealSection').classList.toggle('meal-disabled',disabledDay);
   }
   function renderSummary(w){
     const tile = (label,val)=>`<div class="tile"><div class="tile-label">${label}</div><div class="tile-value">${val}</div></div>`;
-    $('summaryTiles').innerHTML=tile('Heures travaillées',duration(w.actual))+tile('Pauses non prises ⭐',String(w.noBreakCount))+tile('Total retenu',duration(w.effective));
+    $('summaryTiles').innerHTML=tile('Heures travaillées',duration(w.actual))+tile('Repères ⭐',String(w.noBreakCount))+tile('Total retenu',duration(w.effective));
     $('weekRows').innerHTML=w.rows.map(({key,d,calc:c,day})=>{
       const pause=c.off?'—':c.pause===null?'—':duration(c.pause);
       const desc=`${WEEKDAYS[day]} ${dateFromKey(key).getDate()}${c.pause===0&&c.complete?' ⭐':''}`;
@@ -452,7 +460,7 @@
     }).join('');
     const vehicleText=m.vehicle.done===true?'☑ Oui  ☐ Non':m.vehicle.done===false?'☐ Oui  ☑ Non':'☐ Oui  ☐ Non';
     const netBox=m.incomplete.length?'À compléter':m.net>0?`+${duration(m.net)}`:m.net<0?signed(m.net):'0h00';
-    const netLabel=m.net>0?'Heures en plus (solde du mois)':m.net<0?'Heures en moins (solde du mois)':'Solde du mois';
+    const netLabel=m.net>0?'Solde horaire positif du mois':m.net<0?'Heures en moins (solde du mois)':'Solde du mois';
     $('printSheet').classList.toggle('p-dense',m.printable.length>22 || m.weeks.length>=6 || m.starCount>10);
     $('printSheet').innerHTML=`<div class="p-month-header"><div class="p-month-brand"><img src="assets/logo-charriaut.png" alt="Logo Charriaut"><div><h1>RELEVÉ MENSUEL DES HEURES</h1><div class="p-month-title">CHARRIAUT · ${esc(m.label.toUpperCase())}</div></div></div><div class="p-month-person"><span><b>Nom :</b> ${esc(state.settings.lastName||'À renseigner')}</span><span><b>Prénom :</b> ${esc(state.settings.firstName||'À renseigner')}</span><span><b>E-mail :</b> ${esc(state.settings.employeeEmail||'À renseigner')}</span><span><b>Destinataire :</b> contact@charriaut.fr</span></div></div>
      <table class="p-month-table"><colgroup><col style="width:6%"><col style="width:8%"><col style="width:13%"><col style="width:7%"><col style="width:8%"><col style="width:13%"><col style="width:8%"><col style="width:8%"><col style="width:7%"><col style="width:22%"></colgroup><thead><tr><th>Date</th><th>Embauche</th><th>Lieu embauche</th><th>Pause</th><th>Débauche</th><th>Lieu débauche</th><th>Travail</th><th>Écart jour</th><th>Panier</th><th>Observation / Congés / RTT</th></tr></thead><tbody>${grid}</tbody></table>
@@ -536,7 +544,7 @@
     const val=e.target.value.trim();
     if(val==='' || !/^\d+$/.test(val) || Number(val)>600){toast('Indique une durée entre 0 et 600 minutes.');return;}
     setDay(selected,{breakMode:'duration',breakPlan:'custom',breakMinutes:Number(val),noBreak:Number(val)===0});
-    toast(Number(val)===0?'⭐ Aucune pause déclarée':`Pause personnalisée de ${duration(Number(val))} enregistrée ✓`);
+    toast(Number(val)===0?'⭐ Option enregistrée':`Pause personnalisée de ${duration(Number(val))} enregistrée ✓`);
   });
   $('dayNote').addEventListener('change',e=>setDay(selected,{note:e.target.value.slice(0,1500)}));
   $('offDay').addEventListener('click',()=>{
@@ -647,9 +655,20 @@
       todayKey=now;render();
     }
   });
+  // V11: raccourcis d’accueil et menu sans modifier les données locales.
+  const toPanel=(id)=>{const el=$(id);if(!el)return;el.scrollIntoView({behavior:'smooth',block:'start'});};
+  $('shortcutMeal').addEventListener('click',()=>{const el=$('mealSection');el.hidden=false;toPanel('mealSection');});
+  $('shortcutPdf').addEventListener('click',()=>toPanel('monthCard'));
+  $('shortcutHistory').addEventListener('click',()=>toPanel('archiveCard'));
+  $('shortcutLeave').addEventListener('click',()=>toPanel('leaveCard'));
+  $('navHome').addEventListener('click',()=>toPanel('todayCard'));
+  $('navHistory').addEventListener('click',()=>toPanel('archiveCard'));
+  $('navDocs').addEventListener('click',()=>toPanel('monthCard'));
+  $('menuBtn').addEventListener('click',()=>{const el=$('dateDisclosure');el.open=!el.open;if(el.open)toPanel('dateDisclosure');});
+  document.querySelectorAll('[data-menu-target]').forEach(el=>el.addEventListener('click',()=>{$('menuPanel').hidden=true;$('menuBtn').setAttribute('aria-expanded','false');toPanel(el.dataset.menuTarget);}));
   render();updateConnection();
   const hasProfile=!!(state.settings.firstName&&state.settings.lastName&&state.settings.employeeEmail);
   if(!hasProfile){window.setTimeout(()=>{if(!$('settingsDialog').open)openSettings();},500);}
   // Export tested arithmetic to browser for optional on-device diagnostic (read-only).
-  window.Pointage39hVersion='10.0.0-CHARRIAUT-Entreprise-Etoile';
+  window.Pointage39hVersion='11.0.0-CHARRIAUT-Entreprise-Design';
 })();

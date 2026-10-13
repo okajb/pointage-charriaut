@@ -1,37 +1,24 @@
-POINTAGE CHARRIAUT – ENTREPRISE V10 ⭐ – PAUSE NON PRISE
+POINTAGE CHARRIAUT V11 · NOUVELLE INTERFACE · INSTALLATION GITHUB PAGES
 
-NOUVEAUTÉ : un bouton ⭐ « Pause de 20 min non prise » apparaît directement sous les choix de pause. Enregistre 0 min de pause réellement prise. Pour revenir à la normale, choisir 20 min, 1 h, 2 h ou Autre. L’heure de débauche réellement pointée reste enregistrée. Le relevé affiche une heure équivalente marquée * et conserve la véritable heure en petit dessous. Les calculs d’heures reposent toujours sur les heures réellement travaillées.
+1. Depuis votre application actuelle : effectuez une sauvegarde JSON des horaires.
+2. Ouvrez https://github.com/okajb/pointage-charriaut
+3. Cliquer sur Add file → Upload files.
+4. Ajouter les fichiers de CE DOSSIER et le dossier assets à la racine du dépôt (pas le ZIP).
+5. Valider avec Commit changes ; attendre quelques minutes la publication GitHub Pages.
+6. Ouvrir https://okajb.github.io/pointage-charriaut/ sur le téléphone.
+7. Si l’ancienne interface reste affichée, fermer l’application puis la rouvrir / rafraîchir.
 
-IMPORTANT : la pause réglementaire doit être prise ; ce bouton sert à documenter une pause manquée, pas à prétendre qu’elle a été effectuée.
+DANS CETTE VERSION
+- Design simplifié, deux grands boutons Embauche/Débauche, heure du téléphone.
+- Choix de pause 20 min / 1 h / 2 h / autre et bouton étoile seul.
+- Lieux de début et de fin distincts : Bureau/Client + adresse.
+- Panier repas Oui/Non, Congés/RTT, historiques et corrections, sauvegarde JSON.
+- PDF mensuel A4 paysage : heures, écarts journaliers et hebdomadaires, paniers,
+  congés/RTT, véhicule et bilan net mensuel.
+- Rappel pour contact@charriaut.fr. Envoi du PDF manuel comme pièce jointe.
 
-POINTAGE CHARRIAUT — ENTREPRISE V9.1 — A4 PAYSAGE
-=================================================
-
-Cette version maintient toutes les fonctions de V9 : 2 pointages, durées de
-pause, lieux d’embauche/débauche, paniers repas, congés/RTT, historique,
-contrôle du véhicule et rappel d’envoi à contact@charriaut.fr.
-
-LE PDF : UNE SEULE FEUILLE A4 EN PAYSAGE
----------------------------------------
-Dans « Ma feuille du mois », sélectionner le mois puis toucher « Créer PDF ».
-L’application adapte la taille des lignes aux mois chargés, dont ceux de 31 jours
-et les mois avec jours de week-end travaillés. Imprimer/enregistrer en A4 paysage.
-Sur l’iPhone, si l’écran d’impression propose une autre taille de papier,
-choisir A4 et orientation paysage, avec échelle 100 % / « adapter à la page ».
-
-La feuille unique contient : coordonnées du salarié, embauche, lieu embauche,
-pause, débauche, lieu de débauche, durée et écart journalier, panier repas,
-congés/RTT, totaux de chaque semaine, bilan mensuel, total des paniers et
-contrôle des niveaux du véhicule.
-
-MISE À JOUR
------------
-1. Sauvegarder ses données dans l’ancienne application.
-2. Décompresser le ZIP et remplacer les fichiers sur GitHub Pages.
-3. Conserver la même adresse d’application et le même navigateur.
-4. Actualiser et tester un mois complet sur son téléphone.
-5. Télécharger le PDF, puis le joindre au courriel pour contact@charriaut.fr.
-
-IMPORTANT : pas d’envoi automatique. Les données sont locales et une sauvegarde
-régulière est recommandée. Le bilan mensuel reste indicatif : les heures
-supplémentaires légales se calculent à la semaine selon les règles applicables.
+DONNÉES ET CONTRÔLES
+Conserve le même stockage local que les versions antérieures : pas de migration obligatoire.
+Faites une sauvegarde avant de changer de version. La publication GitHub ne transfère
+aucune information d’un salarié à un autre.
+Les vraies heures et la durée réelle des pauses demeurent dans les données et le bilan.

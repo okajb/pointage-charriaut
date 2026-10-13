@@ -8,7 +8,7 @@
   "id": "./index.html",
   "display": "standalone",
   "background_color": "#f3f7fa",
-  "theme_color": "#315772",
+  "theme_color": "#0B3766",
   "icons": [
     {
       "src": "assets/icon-192.png",
