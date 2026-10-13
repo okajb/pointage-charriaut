@@ -11,8 +11,8 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" sizes="192x192" href="assets/icon-192.png">
 <link rel="apple-touch-icon" href="assets/icon-180.png">
-<link rel="stylesheet" href="styles.css?v=12">
-<title>CHARRIAUT · Pointage équipe V12</title>
+<link rel="stylesheet" href="styles.css?v=14">
+<title>CHARRIAUT · Pointage équipe V14</title>
 </head>
 <body>
 <div class="shell">
@@ -26,7 +26,7 @@
       <div class="team-profile-text"><span class="team-kicker">ESPACE SALARIÉ · DONNÉES PERSONNELLES</span><strong id="profileStatus">Configurer mon profil</strong><small>Ces heures restent enregistrées sur cet appareil.</small></div>
       <button id="editProfile" class="team-profile-edit" type="button">Mon profil <span aria-hidden="true">›</span></button>
     </section>
-    <div class="connection-tip" id="connectionTip" role="status"></div>
+    <div class="connection-tip" id="connectionTip" role="status"></div><div id="saveStatus" class="save-status" role="status" aria-live="polite">Vérification de la sauvegarde…</div>
     <section class="month-reminder" id="monthReminder" hidden aria-live="polite">
       <strong>📩 Dernier jour du mois : pense au relevé !</strong>
       <p>Vérifie tes pointages, tes paniers repas, les congés/RTT et le contrôle du véhicule. Envoie le PDF à <strong>contact@charriaut.fr</strong>.</p>
@@ -124,9 +124,22 @@
         <label>Observation (facultative)<input id="vehicleNote" type="text" maxlength="180" placeholder="Ex. : niveau lave-glace à compléter"></label>
       </div>
       <p class="month-alert" id="monthWarning" hidden></p>
-      <div class="action-stack"><button class="primary-btn" id="printPdf">⬇ &nbsp; Créer ma feuille mensuelle PDF</button><div class="secondary-actions"><button class="secondary-btn" id="sendMail">✉ &nbsp; Préparer le mail mensuel</button><button class="secondary-btn" id="exportCsv">⇩ &nbsp; CSV du mois</button></div><button class="backup-inline" id="quickBackup" type="button">🛡️ Sauvegarder mes pointages sur ce téléphone</button></div>
-      <button type="button" class="calendar-reminder-btn" id="calendarReminder">📅 Ajouter le rappel mensuel à mon calendrier</button>
-      <p class="export-help">Crée le PDF avec l’impression / « Enregistrer au format PDF ». Le bouton mail prépare un brouillon : ajoute toi-même le PDF en pièce jointe avant de l’envoyer.</p>
+      <section class="export-v13" aria-label="Documents mensuels">
+        <div class="export-card-primary">
+          <div class="export-icon">PDF</div>
+          <div><strong>Mon relevé mensuel</strong><small>1 page A4 · Paysage · Directement téléchargeable</small></div>
+          <button class="primary-btn" type="button" id="printPdf">⬇ Télécharger mon PDF</button>
+        </div>
+        <button type="button" class="secondary-btn mail-action" id="sendMail">✉ Préparer le mail à contact@charriaut.fr</button>
+        <details class="export-options"><summary>Autres formats et rappels</summary><button class="secondary-btn" id="exportCsv" type="button">Exporter le CSV du mois</button><button type="button" class="calendar-reminder-btn" id="calendarReminder">📅 Ajouter le rappel mensuel au calendrier</button></details>
+      </section>
+      <section class="backup-v13" aria-label="Sécurité et sauvegardes">
+        <div class="backup-heading"><span class="backup-shield" aria-hidden="true">🛡</span><div><h3>Sécurité de mes pointages</h3><p>Chaque saisie est enregistrée immédiatement sur ce téléphone, avec une copie de secours locale lorsque disponible.</p></div></div>
+        <p class="backup-status" id="backupInlineStatus" role="status">Vérification de l'enregistrement…</p>
+        <button class="backup-download" id="quickBackup" type="button">⬇ Sauvegarder une copie dans Fichiers</button>
+        <button class="backup-restore" id="quickRestore" type="button">↺ Restaurer une sauvegarde</button>
+        <p class="backup-fineprint">Important : une panne normale ne supprime généralement pas les pointages. En revanche, une perte du téléphone ou la suppression des données de l’application peut les effacer. Conserve régulièrement le fichier de sauvegarde en dehors de l’application.</p>
+      </section>
     </section>
     <section class="section-card install-card"><div class="section-heading"><div><div class="eyebrow aqua">INSTALLATION & AIDE</div><h2>La même appli pour toute l’équipe</h2></div><span class="month-format">Sans abonnement</span></div>
       <p class="archive-sub">Chaque salarié installe ce lien sur <strong>son téléphone personnel</strong> et crée son propre profil. Aucun compte central ; pas de données des collègues visibles.</p>
@@ -134,15 +147,15 @@
       <details><summary>Installer sur Samsung / Android (Chrome)</summary><p>Ouvre le lien dans Chrome, puis touche « Installer l’application » ou le menu ⋮ et « Ajouter à l’écran d’accueil ».</p></details>
       <details><summary>Conserver ses heures sans les perdre</summary><p>Touche « Sauvegarder mes pointages », garde le fichier JSON dans Fichiers / Drive et refais cette sauvegarde régulièrement. En cas de changement de téléphone, restaure-le depuis les réglages.</p></details>
     </section>
-    <p class="privacy-note">🔒 Pas de transmission automatique au bureau. Les heures sont stockées localement dans le navigateur de cet appareil ; elles peuvent disparaître si l’application ou ses données sont effacées. Garde des sauvegardes. N’utilise pas le mode privé. L’envoi du PDF se fait par mail par chaque salarié.</p>
+    <p class="privacy-note">🔒 Pas de transmission automatique au bureau. Les heures sont stockées sur cet appareil et recopiées dans une seconde mémoire locale quand elle est disponible. Ces copies ne protègent pas contre la perte du téléphone ou la suppression des données de l’application : exporte régulièrement une sauvegarde dans Fichiers ou Drive. N’utilise pas le mode privé. L’envoi du PDF se fait par mail par chaque salarié.</p>
   </main>
   <nav class="bottom-nav" aria-label="Navigation rapide"><button type="button" id="navHome">⌂<span>Accueil</span></button><button type="button" id="navHistory">☷<span>Historique</span></button><button type="button" id="navDocs">▤<span>Documents</span></button></nav>
 </div>
 
-<dialog id="settingsDialog" aria-labelledby="settingsTitle"><form method="dialog" class="dialog-content"><div class="dialog-head"><h2 id="settingsTitle">Mon profil salarié</h2><button aria-label="Fermer" class="icon-button" value="cancel">✕</button></div><p class="onboarding-help" id="onboardingHelp">Bienvenue ! Renseigne une seule fois ton nom, ton prénom et ton e-mail. Tes heures seront ensuite liées à ce profil sur ce téléphone.</p><label class="setting"><span>Prénom du salarié</span><input id="firstName" required type="text" placeholder="Prénom" autocomplete="given-name"></label><label class="setting"><span>Nom du salarié</span><input id="lastName" required type="text" placeholder="Nom de famille" autocomplete="family-name"></label><p id="legacyNameNotice" class="setting-legacy" hidden></p><label class="setting"><span>Adresse e-mail du salarié (affichée sur le PDF)</span><input id="employeeEmail" required type="email" placeholder="prenom.nom@exemple.fr" autocomplete="email"></label><label class="setting"><span>E-mail du bureau pour les relevés (fixe)</span><input id="recipient" type="email" value="contact@charriaut.fr" readonly></label><div class="setting"><span>Objectif hebdomadaire</span><p class="muted">39 h : 8 h du lundi au jeudi et 7 h le vendredi.</p></div><div class="setting"><span>Sauvegardes</span><p class="muted" id="backupState">Aucune sauvegarde connue.</p><div class="secondary-actions"><button class="secondary-btn" id="backupBtn" type="button">Exporter la sauvegarde</button><button class="secondary-btn" id="restoreBtn" type="button">Restaurer</button></div><input id="restoreFile" type="file" accept="application/json,.json" hidden></div><p class="data-caution">Un profil par téléphone / navigateur : modifier le nom ne sépare pas les anciens pointages d’un autre salarié.</p><button class="primary-btn" type="submit">Enregistrer mon profil</button></form></dialog>
+<dialog id="settingsDialog" aria-labelledby="settingsTitle"><form method="dialog" class="dialog-content"><div class="dialog-head"><h2 id="settingsTitle">Mon profil salarié</h2><button aria-label="Fermer" class="icon-button" value="cancel">✕</button></div><p class="onboarding-help" id="onboardingHelp">Bienvenue ! Renseigne une seule fois ton nom, ton prénom et ton e-mail. Tes heures seront ensuite liées à ce profil sur ce téléphone.</p><label class="setting"><span>Prénom du salarié</span><input id="firstName" required type="text" placeholder="Prénom" autocomplete="given-name"></label><label class="setting"><span>Nom du salarié</span><input id="lastName" required type="text" placeholder="Nom de famille" autocomplete="family-name"></label><p id="legacyNameNotice" class="setting-legacy" hidden></p><label class="setting"><span>Adresse e-mail du salarié (affichée sur le PDF)</span><input id="employeeEmail" required type="email" placeholder="prenom.nom@exemple.fr" autocomplete="email"></label><label class="setting"><span>E-mail du bureau pour les relevés (fixe)</span><input id="recipient" type="email" value="contact@charriaut.fr" readonly></label><div class="setting"><span>Objectif hebdomadaire</span><p class="muted">39 h : 8 h du lundi au jeudi et 7 h le vendredi.</p></div><div class="setting"><span>Sauvegardes</span><p class="muted" id="backupState">Aucune sauvegarde connue.</p><div class="secondary-actions"><button class="secondary-btn" id="backupBtn" type="button">Télécharger une copie JSON</button><button class="secondary-btn" id="restoreBtn" type="button">Restaurer</button></div><input id="restoreFile" type="file" accept="application/json,.json" hidden></div><p class="data-caution">Un profil par téléphone / navigateur : modifier le nom ne sépare pas les anciens pointages d’un autre salarié.</p><button class="primary-btn" type="submit">Enregistrer mon profil</button></form></dialog>
 <dialog id="auditDialog" aria-labelledby="auditTitle"><div class="dialog-content"><div class="dialog-head"><h2 id="auditTitle">Modifications</h2><button type="button" id="closeAudit" class="icon-button" aria-label="Fermer les modifications" onclick="document.getElementById('auditDialog').close()">✕</button></div><p class="audit-sub">Les anciens horaires sont conservés pour vérifier les corrections.</p><div id="auditRows"></div></div></dialog>
 <section class="print-sheet" id="printSheet" aria-hidden="true"></section>
 <div id="toast" role="status" aria-live="polite"></div>
-<script src="app.js?v=12" defer></script>
+<script src="app.js?v=14" defer></script>
 </body>
 </html>

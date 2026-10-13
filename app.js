@@ -2,6 +2,12 @@
 (() => {
   // Keep v1 key to preserve all existing data when upgrading from v6.
   const STORAGE_KEY = 'pointage39h.v1';
+  const LOCAL_MIRROR_KEY = 'pointage39h.v1.backupV13';
+  const IDB_NAME = 'charriaut-heures-secours-v1';
+  const IDB_STORE = 'copies';
+  let writeProblem = false;
+  let pendingMirror;
+  let idbTail = Promise.resolve();
   const WEEKDAYS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
   const LONG_DAYS = ['dimanche','lundi','mardi','mercredi','jeudi','vendredi','samedi'];
   const MONTHS = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
@@ -25,17 +31,130 @@
   const weekdayIndex = key => (dateFromKey(key).getDay()+6)%7;
   let todayKey = dateKey(new Date());
   const timeNow = () => {const d=new Date();return `${pad(d.getHours())}:${pad(d.getMinutes())}`;};
+  // Saisie libre au clavier numérique (sans roulette iOS).
+  // Exemples : 0800, 800, 16:20, 17h30 -> HH:MM.
+  function normalizeManualTime(value){
+    const text=String(value??'').trim().replace(/\s+/g,'').replace(/[hH.]/g,':');
+    if(!text)return '';
+    let hour,minute;
+    if(/^\d{1,2}:\d{1,2}$/.test(text)){
+      [hour,minute]=text.split(':').map(Number);
+    }else if(/^\d{1,4}$/.test(text)){
+      if(text.length<=2){hour=Number(text);minute=0;}
+      else {hour=Number(text.slice(0,-2));minute=Number(text.slice(-2));}
+    }else return null;
+    return hour>=0&&hour<=23&&minute>=0&&minute<=59?`${pad(hour)}:${pad(minute)}`:null;
+  }
+  function manualTimeMarkup(field,value,attributes=''){
+    return `<input class="manual-time-input" type="text" inputmode="numeric" enterkeyhint="done" maxlength="5" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="HHMM" ${attributes} value="${esc(value||'')}">`;
+  }
+  function bindManualTimeInputs(container,fieldAttribute){
+    container.querySelectorAll(`[${fieldAttribute}]`).forEach(input=>{
+      input.addEventListener('focus',()=>{
+        // L'heure existante est sélectionnée pour pouvoir la remplacer en une saisie.
+        input.select();
+      });
+      input.addEventListener('input',()=>{
+        input.classList.remove('manual-time-invalid');
+        input.removeAttribute('aria-invalid');
+      });
+      input.addEventListener('keydown',event=>{
+        if(event.key==='Enter'){
+          event.preventDefault();
+          input.blur();
+        }
+      });
+      input.addEventListener('blur',()=>{
+        const parsed=normalizeManualTime(input.value);
+        if(parsed===null){
+          input.classList.add('manual-time-invalid');
+          input.setAttribute('aria-invalid','true');
+          toast('Heure invalide. Tape 4 chiffres, par exemple 0830.');
+          return;
+        }
+        const field=input.getAttribute(fieldAttribute);
+        input.value=parsed;
+        if(parsed!==getDay(selected)[field]){
+          // Sauvegarder sans reconstruire immédiatement les champs : sinon un clic
+          // sur la seconde heure pourrait faire disparaître son clavier.
+          const dayKey=selected;
+          const existing=getDay(dayKey);
+          logChange(dayKey,field,existing[field],parsed);
+          state.days[dayKey]={...existing,[field]:parsed};
+          const persisted=save();
+          if(persisted)toast(parsed?`Heure enregistrée : ${parsed} ✓`:'Heure effacée ✓');
+          setTimeout(()=>{
+            if(selected!==dayKey)return;
+            // L'autre horaire est en cours de saisie : ne pas lui voler le focus.
+            if(document.activeElement?.matches('.manual-time-input'))return;
+            render();
+          },80);
+        }
+      });
+    });
+  }
+
   const blank = () => ({start:'',lunchOut:'',lunchIn:'',end:'',breakPlan:'',breakMode:'duration',breakMinutes:null,noBreak:false,note:'',off:false,meal:null,locations:{}});
   const defaults = () => ({version:1,settings:{name:'',firstName:'',lastName:'',employeeEmail:'',recipient:'contact@charriaut.fr',lastBackupAt:''},days:{},audit:{},leaves:[],vehicleChecks:{}});
+  function validState(raw) {
+    try {
+      const obj=typeof raw==='string'?JSON.parse(raw):raw;
+      if(!obj || obj.version!==1 || !obj.days || Array.isArray(obj.days) || typeof obj.days!=='object')return null;
+      return {...defaults(), ...obj, settings:{...defaults().settings,...obj.settings},
+        audit:obj.audit&&typeof obj.audit==='object'?obj.audit:{},
+        leaves:Array.isArray(obj.leaves)?obj.leaves:[],
+        vehicleChecks:obj.vehicleChecks&&typeof obj.vehicleChecks==='object'&&!Array.isArray(obj.vehicleChecks)?obj.vehicleChecks:{}};
+    }catch(error){return null;}
+  }
   function load() {
     try {
-      const obj=JSON.parse(localStorage.getItem(STORAGE_KEY));
-      if(obj && obj.version===1 && obj.days && typeof obj.days==='object'){
-        return {...defaults(), ...obj, settings:{...defaults().settings,...obj.settings},audit:obj.audit&&typeof obj.audit==='object'?obj.audit:{},leaves:Array.isArray(obj.leaves)?obj.leaves:[],vehicleChecks:obj.vehicleChecks&&typeof obj.vehicleChecks==='object'&&!Array.isArray(obj.vehicleChecks)?obj.vehicleChecks:{}};
+      const principal=validState(localStorage.getItem(STORAGE_KEY));
+      if(principal)return principal;
+      const reserve=validState(localStorage.getItem(LOCAL_MIRROR_KEY));
+      if(reserve){
+        try{localStorage.setItem(STORAGE_KEY,JSON.stringify(reserve));}catch(error){}
+        return reserve;
       }
-    } catch(e){ console.warn('Impossible de lire la sauvegarde',e); }
+    } catch(error){console.warn('Lecture du stockage impossible',error);}
     return defaults();
   }
+  function idbOpen(){
+    return new Promise((resolve,reject)=>{
+      if(!('indexedDB' in window)){reject(Error('IndexedDB indisponible'));return;}
+      const req=indexedDB.open(IDB_NAME,1);
+      req.onupgradeneeded=()=>{if(!req.result.objectStoreNames.contains(IDB_STORE))req.result.createObjectStore(IDB_STORE);};
+      req.onsuccess=()=>resolve(req.result);
+      req.onerror=()=>reject(req.error||Error('IndexedDB'));
+    });
+  }
+  async function idbRead(){
+    const db=await idbOpen();
+    return new Promise((resolve,reject)=>{
+      const tx=db.transaction(IDB_STORE,'readonly');
+      const req=tx.objectStore(IDB_STORE).get('dernier');
+      req.onsuccess=()=>resolve(req.result||null);
+      req.onerror=()=>reject(req.error||Error('Lecture secours'));
+      tx.oncomplete=()=>db.close();
+      tx.onerror=()=>db.close();
+    });
+  }
+  async function idbWrite(json){
+    const db=await idbOpen();
+    return new Promise((resolve,reject)=>{
+      const tx=db.transaction(IDB_STORE,'readwrite');
+      tx.objectStore(IDB_STORE).put(json,'dernier');
+      tx.oncomplete=()=>{db.close();resolve(true);};
+      tx.onerror=()=>{db.close();reject(tx.error||Error('Écriture secours'));};
+      tx.onabort=()=>{db.close();reject(tx.error||Error('Annulation secours'));};
+    });
+  }
+  function mirrorToIndexedDB(json){
+    clearTimeout(pendingMirror);
+    pendingMirror=setTimeout(()=>{
+      idbTail=idbTail.catch(()=>{}).then(()=>idbWrite(json)).catch(()=>{});
+    },180);
+  }
+
   let state=load();
   let activeWeek=mondayOfKey(todayKey);
   let selected=todayKey;
@@ -45,9 +164,32 @@
   const monthPeriod=()=>{const keys=Array.from({length:7},(_,i)=>dateKey(plusDays(dateFromKey(activeWeek),i)));return [...new Set(keys.map(k=>{const d=dateFromKey(k);return `${MONTHS[d.getMonth()]} ${d.getFullYear()}`;}))].join(' / ');};
   const formatStamp=iso=>{const d=new Date(iso);return Number.isFinite(d.getTime())?`${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()} à ${pad(d.getHours())}:${pad(d.getMinutes())}`:'—';};
   let toastTimeout;
-  function save() {
-    try {localStorage.setItem(STORAGE_KEY,JSON.stringify(state));}
-    catch(e){toast('Attention : sauvegarde locale indisponible. Exporte le relevé.');}
+  function updateSaveStatus(ok=true){
+    const el=$('saveStatus'),inline=$('backupInlineStatus');
+    const txt=ok?`✓ Enregistré sur ce téléphone · ${state.savedAt?formatStamp(state.savedAt):'données locales'}`:
+      '⚠ Enregistrement non confirmé. Exporte immédiatement une copie et vérifie l’espace disponible.';
+    if(el){el.textContent=txt;el.classList.toggle('save-error',!ok);}
+    if(inline){inline.textContent=ok?'✓ Pointages mémorisés sur cet appareil. Dernier enregistrement : '+(state.savedAt?formatStamp(state.savedAt):'aucun')+'.':'⚠ Enregistrement impossible : réalise une sauvegarde et libère de l’espace.';inline.classList.toggle('save-error',!ok);}
+  }
+  function save(){
+    try{
+      state.savedAt=new Date().toISOString();
+      const json=JSON.stringify(state);
+      localStorage.setItem(STORAGE_KEY,json);
+      if(localStorage.getItem(STORAGE_KEY)!==json)throw Error('La lecture de confirmation a échoué');
+      // Copie locale indépendante de la clé principale, utile en cas de contenu corrompu.
+      try{localStorage.setItem(LOCAL_MIRROR_KEY,json);}catch(error){}
+      mirrorToIndexedDB(json); // copie dans IndexedDB lorsque le système l'autorise.
+      writeProblem=false;
+      updateSaveStatus(true);
+      return true;
+    }catch(error){
+      writeProblem=true;
+      updateSaveStatus(false);
+      toast('⚠ Pointage non enregistré sur le téléphone. Fais une sauvegarde.');
+      console.warn('Erreur d’enregistrement',error);
+      return false;
+    }
   }
   function toast(message) {
     const element=$('toast');element.textContent=message;element.classList.add('show');
@@ -75,7 +217,7 @@
     for(const field of Object.keys(AUDIT_LABELS)){
       if(Object.hasOwn(values,field)&&values[field]!==before[field])logChange(key,field,before[field],values[field]);
     }
-    state.days[key]={...before,...values};save();render();
+    state.days[key]={...before,...values};const persisted=save();render();return persisted;
   }
   function leaveOn(key){return state.leaves.find(l=>l && (l.type==='CP'||l.type==='RTT') && l.start<=key && l.end>=key)||null;}
   function leaveLabel(type){return type==='RTT'?'RTT':'Congés payés';}
@@ -228,8 +370,8 @@
           <span class="tap-label">${item.title}</span>
           <span class="tap-time">${esc(d[item.key]||'Appuyer pour pointer')}</span>
         </button>
-        <label class="time-edit-label">${d[item.key]?'Modifier l’heure':'Saisie manuelle'}
-          <input class="point-input" type="time" step="60" aria-label="Heure de ${item.title}" data-field="${item.key}" value="${esc(d[item.key])}" ${disabledDay?'disabled':''}></label>
+        <label class="time-edit-label">${d[item.key]?'Modifier l’heure au clavier':'Saisir l’heure au clavier'}
+          ${manualTimeMarkup(item.key,d[item.key],`aria-label="Heure de ${item.title} au clavier, par exemple 0830" data-field="${item.key}" ${disabledDay?'disabled':''}`)}</label>
       </div>`;
     }).join('');
     $('locationGrid').innerHTML=FIELD_LIST.map(item=>{
@@ -246,7 +388,7 @@
         ${reuse?`<button type="button" class="copy-location" data-copy-place="${item.key}">↳ Même lieu qu’à l’embauche</button>`:''}
       </section>`;
     }).join('');
-    $('pointGrid').querySelectorAll('[data-field]').forEach(el=>el.addEventListener('change',()=>setDay(selected,{[el.dataset.field]:el.value})));
+    bindManualTimeInputs($('pointGrid'),'data-field');
     $('pointGrid').querySelectorAll('[data-now]').forEach(el=>el.addEventListener('click',()=>{
       const key=el.dataset.now;
       // A tap on "Maintenant" may only record the real current date.
@@ -259,8 +401,8 @@
         return;
       }
       if(getDay(selected)[key] && !confirm('Remplacer l’heure '+getDay(selected)[key]+' par l’heure actuelle ?')) return;
-      setDay(selected,{[key]:timeNow()});
-      toast(locationReady(getLocation(getDay(selected),key))?'Heure et lieu enregistrés ✓':'Heure enregistrée ✓ Pense au lieu de pointage.');
+      const persisted=setDay(selected,{[key]:timeNow()});
+      if(persisted)toast(locationReady(getLocation(getDay(selected),key))?'Heure et lieu enregistrés ✓':'Heure enregistrée ✓ Pense au lieu de pointage.');
     }));
     $('locationGrid').querySelectorAll('[data-place]').forEach(el=>el.addEventListener('click',()=>{
       const {point,place}=el.dataset;
@@ -293,8 +435,8 @@
     const legacy=$('legacyBreak');
     legacy.hidden=!isLegacy||disabledDay;
     if(isLegacy&&!disabledDay){
-      legacy.innerHTML=`<strong>Ancien pointage du midi</strong><p>Cette journée vient d’une ancienne version. Tu peux corriger les deux heures ou sélectionner une durée au-dessus.</p><div class="legacy-fields"><label>Sortie midi<input type="time" step="60" data-legacy-time="lunchOut" value="${esc(d.lunchOut)}"></label><label>Reprise midi<input type="time" step="60" data-legacy-time="lunchIn" value="${esc(d.lunchIn)}"></label></div>`;
-      legacy.querySelectorAll('[data-legacy-time]').forEach(el=>el.addEventListener('change',()=>setDay(selected,{[el.dataset.legacyTime]:el.value})));
+      legacy.innerHTML=`<strong>Ancien pointage du midi</strong><p>Tu peux corriger les deux heures en les tapant au clavier, ou sélectionner une durée au-dessus.</p><div class="legacy-fields"><label>Sortie midi${manualTimeMarkup('lunchOut',d.lunchOut,'data-legacy-time="lunchOut" aria-label="Sortie midi, saisir 4 chiffres"')}</label><label>Reprise midi${manualTimeMarkup('lunchIn',d.lunchIn,'data-legacy-time="lunchIn" aria-label="Reprise midi, saisir 4 chiffres"')}</label></div>`;
+      bindManualTimeInputs(legacy,'data-legacy-time');
     }else{legacy.innerHTML='';}
     const info=$('pauseInfo');
     if(disabledDay){info.className='pause-info';info.textContent=isLeave?`${leaveLabel(c.leaveType)} : aucun pointage nécessaire.`:'Cette journée est indiquée comme non travaillée.';}
@@ -423,6 +565,314 @@
     m.weeks.forEach(w=>rows.push([`S${w.weekNum}`,w.begin,w.finish,w.actual,w.weeklyReference,w.allWeekdaysDone?w.gap:'',w.allWeekdaysDone?'Complet':'À compléter']));
     return '\ufeff'+rows.map(row=>row.map(q).join(';')).join('\r\n');
   }
+  // Génération locale directe d'un fichier PDF A4 paysage / exactement une page.
+  // Aucun service externe, bibliothèque distante ou dialogue d'impression requis.
+  async function logoJpeg(){
+    const img=new Image();
+    img.src='assets/logo-charriaut.png';
+    await img.decode();
+    const canvas=document.createElement('canvas');canvas.width=260;canvas.height=260;
+    const ctx=canvas.getContext('2d');
+    ctx.fillStyle='#fff';ctx.fillRect(0,0,260,260);
+    ctx.drawImage(img,0,0,260,260);
+    const b64=canvas.toDataURL('image/jpeg',.87).split(',')[1];
+    return atob(b64);
+  }
+  function pdfWin1252(value){
+    const extras={'−':45,'€':128,'‚':130,'ƒ':131,'„':132,'…':133,'†':134,'‡':135,'ˆ':136,'‰':137,'Š':138,'‹':139,'Œ':140,'Ž':142,'‘':145,'’':146,'“':147,'”':148,'•':149,'–':150,'—':151,'˜':152,'™':153,'š':154,'›':155,'œ':156,'ž':158,'Ÿ':159};
+    return Array.from(String(value??'')).map(ch=>ch.charCodeAt(0)<=255?ch:(extras[ch]!==undefined?String.fromCharCode(extras[ch]):'?')).join('').replace(/[\x00-\x08\x0b-\x1f]/g,' ');
+  }
+  function pdfEscape(value){return pdfWin1252(value).replace(/\\/g,'\\\\').replace(/\(/g,'\\(').replace(/\)/g,'\\)').replace(/[\r\n]/g,' ');}
+  function pdfDataBlob(content,jpeg){
+    // Produire des octets directs, car les flux PDF (JPEG et texte Windows-1252) ne sont pas UTF-8.
+    const objects=[];
+    objects[1]='<< /Type /Catalog /Pages 2 0 R >>';
+    objects[2]='<< /Type /Pages /Kids [3 0 R] /Count 1 >>';
+    objects[3]='<< /Type /Page /Parent 2 0 R /MediaBox [0 0 841.89 595.28] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> /XObject << /Im1 6 0 R >> >> /Contents 7 0 R >>';
+    objects[4]='<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>';
+    objects[5]='<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>';
+    objects[6]=`<< /Type /XObject /Subtype /Image /Width 260 /Height 260 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpeg.length} >>\nstream\n${jpeg}\nendstream`;
+    objects[7]=`<< /Length ${content.length} >>\nstream\n${content}\nendstream`;
+    let raw='%PDF-1.4\n%\xE2\xE3\xCF\xD3\n',positions=[0];
+    for(let i=1;i<=7;i++){
+      positions[i]=raw.length;
+      raw+=`${i} 0 obj\n${objects[i]}\nendobj\n`;
+    }
+    const xrefAt=raw.length;
+    raw+='xref\n0 8\n0000000000 65535 f \n';
+    for(let i=1;i<=7;i++)raw+=String(positions[i]).padStart(10,'0')+' 00000 n \n';
+    raw+=`trailer\n<< /Size 8 /Root 1 0 R >>\nstartxref\n${xrefAt}\n%%EOF\n`;
+    const bytes=new Uint8Array(raw.length);
+    for(let i=0;i<raw.length;i++)bytes[i]=raw.charCodeAt(i)&255;
+    return bytes;
+  }
+  async function generateMonthlyPdf(m){
+    const jpeg=await logoJpeg();
+    const cmds=[];
+    const fmt=n=>Number(n).toFixed(2);
+    function color(c){return c.map(v=>fmt(v/255)).join(' ');}
+    function rect(x,y,w,h,fill,stroke){
+      if(fill)cmds.push(`${color(fill)} rg ${fmt(x)} ${fmt(y)} ${fmt(w)} ${fmt(h)} re f`);
+      if(stroke)cmds.push(`${color(stroke)} RG .45 w ${fmt(x)} ${fmt(y)} ${fmt(w)} ${fmt(h)} re S`);
+    }
+    function line(x1,y1,x2,y2,stroke=[211,225,236]){
+      cmds.push(`${color(stroke)} RG .35 w ${fmt(x1)} ${fmt(y1)} m ${fmt(x2)} ${fmt(y2)} l S`);
+    }
+    const measureCanvas=document.createElement('canvas'),measureCtx=measureCanvas.getContext('2d');
+    function fit(text,size,maxWidth,bold=false){
+      let txt=String(text??'').replace(/[\r\n]+/g,' ').trim();
+      measureCtx.font=`${bold?'bold ':''}${size}px Arial`;
+      if(measureCtx.measureText(txt).width<=maxWidth*.82)return txt;
+      while(txt.length>1&&measureCtx.measureText(txt+'…').width>maxWidth*.82)txt=txt.slice(0,-1);
+      return txt+'…';
+    }
+    function text(value,x,y,size=7,bold=false,ink=[19,50,78],maxWidth){
+      const v=maxWidth===undefined?String(value??''):fit(value,size,maxWidth,bold);
+      cmds.push(`${color(ink)} rg BT /${bold?'F2':'F1'} ${fmt(size)} Tf 1 0 0 1 ${fmt(x)} ${fmt(y)} Tm (${pdfEscape(v)}) Tj ET`);
+      return v;
+    }
+    const NAVY=[14,57,104],BLUE=[17,103,178],LIGHT=[224,239,251],MUTED=[75,102,125],GRID=[189,211,228],YELLOW=[255,238,186];
+    // Bandeau avec logo et identification.
+    rect(20,517,802,66,[255,255,255]);
+    cmds.push(`q 48 0 0 48 22 528 cm /Im1 Do Q`);
+    text('RELEVÉ MENSUEL DES HEURES',81,561,18,true,NAVY,430);
+    text(`CHARRIAUT  •  ${m.label.toUpperCase()}`,82,542,10,true,BLUE,400);
+    rect(567,531,251,49,[239,247,253],[202,222,236]);
+    text(`NOM : ${state.settings.lastName||'À renseigner'}`,577,567,7.4,true,NAVY,230);
+    text(`PRÉNOM : ${state.settings.firstName||'À renseigner'}`,577,557,7.4,false,NAVY,230);
+    text(`E-MAIL : ${state.settings.employeeEmail||'À renseigner'}`,577,547,7,false,NAVY,230);
+    text('DESTINATAIRE : contact@charriaut.fr',577,537,7,false,NAVY,230);
+    line(22,520,819,520,[227,176,60]);
+    // Largeurs réellement calibrées pour une feuille A4 paysage.
+    const widths=[51,48,104,47,48,104,52,53,43,248];
+    const xs=[21];for(const w of widths)xs.push(xs[xs.length-1]+w);
+    const weeks=new Map();
+    for(const row of m.printable){const key=mondayOfKey(row.key);if(!weeks.has(key))weeks.set(key,[]);weeks.get(key).push(row);}
+    const startY=507;
+    const headHeight=16, groupHeight=9.3, totalHeight=10;
+    const actualWeeks=weeks.size;
+    const maxTabular=397;
+    const perRow=Math.min(12.2,Math.max(7.7,(maxTabular-headHeight-actualWeeks*(groupHeight+totalHeight))/Math.max(1,m.printable.length)));
+    let top=startY;
+    rect(xs[0],top-headHeight,800,headHeight,NAVY);
+    const labels=['Date','Embauche','Lieu embauche','Pause','Débauche','Lieu débauche','Travail','Écart','Panier','Observation / Congés / RTT'];
+    for(let i=0;i<labels.length;i++)text(labels[i],xs[i]+3,top-10.8,6.5,true,[255,255,255],widths[i]-5);
+    top-=headHeight;
+    let rIndex=0,notesAbr=false;
+    function putRow(values,colors={}){
+      const bottom=top-perRow;
+      if(rIndex%2===0)rect(xs[0],bottom,800,perRow,[247,250,253]);
+      for(let i=1;i<xs.length-1;i++)line(xs[i],bottom,xs[i],top,GRID);
+      line(xs[0],bottom,xs[10],bottom,GRID);
+      for(let i=0;i<10;i++){
+        const s=i===9?6.3:6.7;
+        const rendered=text(values[i],xs[i]+3,bottom+(perRow-s)/2+1,s,i===0||i===6,colors[i]||[26,57,83],widths[i]-6);
+        if(i===9&&rendered!==String(values[i]).replace(/[\r\n]+/g,' ').trim())notesAbr=true;
+      }
+      top=bottom;rIndex++;
+    }
+    for(const [begin,rows] of weeks){
+      rect(xs[0],top-groupHeight,800,groupHeight,[206,231,245]);
+      const w=m.weeks.find(w=>w.begin===begin);
+      text(`SEMAINE ${pad(w.weekNum)}  •  ${begin.slice(8)}/${begin.slice(5,7)} au ${w.finish.slice(8)}/${w.finish.slice(5,7)}`,xs[0]+4,top-6.8,6.5,true,NAVY);
+      top-=groupHeight;
+      for(const row of rows){
+        const {key,d,calc:c,day}=row;
+        const dt=dateFromKey(key),loc=(field)=>{
+          const l=getLocation(d,field);
+          if(!d[field]||c.off)return '—';
+          return l.type==='bureau'?'BUREAU':l.type==='client'?`CLIENT : ${l.site||'À préciser'}`:'À renseigner';
+        };
+        const off=c.off;
+        const stat=c.leaveType?leaveLabel(c.leaveType):d.off?'Non travaillé':c.invalid?'À corriger':!c.complete?'Incomplet':'';
+        const note=[stat,d.note].filter(Boolean).join(' - ');
+        putRow([`${WEEKDAYS[day]} ${pad(dt.getDate())}`,
+          off?'—':d.start||'—',loc('start'),off?'—':duration(c.pause),off?'—':d.end||'—',loc('end'),
+          off?'—':duration(c.actual),off?'—':signed(c.delta),off?'—':d.meal===true?'Oui':'Non',note],
+          {7:c.delta>0?[16,125,78]:c.delta<0?[173,53,52]:[26,57,83]});
+      }
+      rect(xs[0],top-totalHeight,800,totalHeight,[235,244,250]);
+      text(`TOTAL SEMAINE : ${duration(w.actual)}`,xs[0]+5,top-7,7,true,NAVY);
+      text(`RÉFÉRENCE : ${duration(w.weeklyReference)}`,xs[3]+4,top-7,7,true,NAVY);
+      text(`SOLDE : ${w.allWeekdaysDone?signed(w.gap):'À compléter'}`,xs[7]+6,top-7,7,true,w.gap<0?[173,53,52]:NAVY);
+      top-=totalHeight;
+    }
+    // Les totaux tiennent dans un encart fixe. Aucun débordement possible hors de la page.
+    const summaryTop=88;
+    const boxes=[
+      {x:21,w:188,label:'HEURES TRAVAILLÉES',value:duration(m.actual)},
+      {x:214,w:180,label:'BASE AJUSTÉE (CONGÉS / RTT)',value:duration(m.target)},
+      {x:399,w:263,label:m.incomplete.length?'RELEVÉ INCOMPLET':m.net>0?'SOLDE MENSUEL POSITIF':m.net<0?'SOLDE MENSUEL NÉGATIF':'SOLDE MENSUEL',value:m.incomplete.length?'À compléter':signed(m.net),highlight:true},
+      {x:667,w:154,label:'PANIERS REPAS',value:String(m.meals)}
+    ];
+    for(const b of boxes){rect(b.x,55,b.w,33,b.highlight?YELLOW:LIGHT,[179,210,230]);text(b.label,b.x+8,76,7.2,true,NAVY,b.w-14);text(b.value,b.x+8,61,15.5,true,NAVY,b.w-14);}
+    const vc=m.vehicle.done===true?'OUI':m.vehicle.done===false?'NON':'NON RENSEIGNÉ';
+    text(`CONTRÔLE VÉHICULE : ${vc}   ${m.vehicle.note?'-  '+m.vehicle.note:''}`,23,43,6.8,true,NAVY,791);
+    line(21,36,820,36);
+    text(`Congés : ${m.leaves.filter(r=>r.calc.leaveType==='CP').length} j.    RTT : ${m.leaves.filter(r=>r.calc.leaveType==='RTT').length} j.    •    Écarts journaliers indicatifs ; le traitement des heures supplémentaires est validé par le bureau.`,23,27,6.2,false,MUTED,794);
+    const extra=notesAbr?'Observations longues abrégées : texte intégral conservé dans l’application et le CSV.  ':' ';
+    text(`${extra}Édité le ${formatStamp(new Date().toISOString())}.  •  Semaine chevauchant deux mois : total hebdomadaire complet.`,23,18,5.9,false,MUTED,794);
+    // Calculer une seule page quel que soit le nombre de lignes ; le contenu court est garanti.
+    if(top<89)throw Error('Nombre exceptionnel de lignes : export trop dense pour A4 unique.');
+    const content=cmds.join('\n')+'\n';
+    const pdf=pdfDataBlob(content,jpeg);
+    download(`CHARRIAUT_Releve_${m.month}_${(state.settings.lastName||'salarie').replace(/[^a-zA-Z0-9À-ÿ-]/g,'_')}.pdf`,pdf,'application/pdf');
+  }
+
+  // Génération locale directe d'un fichier PDF A4 paysage / exactement une page.
+  // Aucun service externe, bibliothèque distante ou dialogue d'impression requis.
+  async function logoJpeg(){
+    const img=new Image();
+    img.src='assets/logo-charriaut.png';
+    await img.decode();
+    const canvas=document.createElement('canvas');canvas.width=260;canvas.height=260;
+    const ctx=canvas.getContext('2d');
+    ctx.fillStyle='#fff';ctx.fillRect(0,0,260,260);
+    ctx.drawImage(img,0,0,260,260);
+    const b64=canvas.toDataURL('image/jpeg',.87).split(',')[1];
+    return atob(b64);
+  }
+  function pdfWin1252(value){
+    const extras={'−':45,'€':128,'‚':130,'ƒ':131,'„':132,'…':133,'†':134,'‡':135,'ˆ':136,'‰':137,'Š':138,'‹':139,'Œ':140,'Ž':142,'‘':145,'’':146,'“':147,'”':148,'•':149,'–':150,'—':151,'˜':152,'™':153,'š':154,'›':155,'œ':156,'ž':158,'Ÿ':159};
+    return Array.from(String(value??'')).map(ch=>ch.charCodeAt(0)<=255?ch:(extras[ch]!==undefined?String.fromCharCode(extras[ch]):'?')).join('').replace(/[\x00-\x08\x0b-\x1f]/g,' ');
+  }
+  function pdfEscape(value){return pdfWin1252(value).replace(/\\/g,'\\\\').replace(/\(/g,'\\(').replace(/\)/g,'\\)').replace(/[\r\n]/g,' ');}
+  function pdfDataBlob(content,jpeg){
+    // Produire des octets directs, car les flux PDF (JPEG et texte Windows-1252) ne sont pas UTF-8.
+    const objects=[];
+    objects[1]='<< /Type /Catalog /Pages 2 0 R >>';
+    objects[2]='<< /Type /Pages /Kids [3 0 R] /Count 1 >>';
+    objects[3]='<< /Type /Page /Parent 2 0 R /MediaBox [0 0 841.89 595.28] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> /XObject << /Im1 6 0 R >> >> /Contents 7 0 R >>';
+    objects[4]='<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>';
+    objects[5]='<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>';
+    objects[6]=`<< /Type /XObject /Subtype /Image /Width 260 /Height 260 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpeg.length} >>\nstream\n${jpeg}\nendstream`;
+    objects[7]=`<< /Length ${content.length} >>\nstream\n${content}\nendstream`;
+    let raw='%PDF-1.4\n%\xE2\xE3\xCF\xD3\n',positions=[0];
+    for(let i=1;i<=7;i++){
+      positions[i]=raw.length;
+      raw+=`${i} 0 obj\n${objects[i]}\nendobj\n`;
+    }
+    const xrefAt=raw.length;
+    raw+='xref\n0 8\n0000000000 65535 f \n';
+    for(let i=1;i<=7;i++)raw+=String(positions[i]).padStart(10,'0')+' 00000 n \n';
+    raw+=`trailer\n<< /Size 8 /Root 1 0 R >>\nstartxref\n${xrefAt}\n%%EOF\n`;
+    const bytes=new Uint8Array(raw.length);
+    for(let i=0;i<raw.length;i++)bytes[i]=raw.charCodeAt(i)&255;
+    return bytes;
+  }
+  async function generateMonthlyPdf(m){
+    const jpeg=await logoJpeg();
+    const cmds=[];
+    const fmt=n=>Number(n).toFixed(2);
+    function color(c){return c.map(v=>fmt(v/255)).join(' ');}
+    function rect(x,y,w,h,fill,stroke){
+      if(fill)cmds.push(`${color(fill)} rg ${fmt(x)} ${fmt(y)} ${fmt(w)} ${fmt(h)} re f`);
+      if(stroke)cmds.push(`${color(stroke)} RG .45 w ${fmt(x)} ${fmt(y)} ${fmt(w)} ${fmt(h)} re S`);
+    }
+    function line(x1,y1,x2,y2,stroke=[211,225,236]){
+      cmds.push(`${color(stroke)} RG .35 w ${fmt(x1)} ${fmt(y1)} m ${fmt(x2)} ${fmt(y2)} l S`);
+    }
+    const measureCanvas=document.createElement('canvas'),measureCtx=measureCanvas.getContext('2d');
+    function fit(text,size,maxWidth,bold=false){
+      let txt=String(text??'').replace(/[\r\n]+/g,' ').trim();
+      measureCtx.font=`${bold?'bold ':''}${size}px Arial`;
+      if(measureCtx.measureText(txt).width<=maxWidth*.82)return txt;
+      while(txt.length>1&&measureCtx.measureText(txt+'…').width>maxWidth*.82)txt=txt.slice(0,-1);
+      return txt+'…';
+    }
+    function text(value,x,y,size=7,bold=false,ink=[19,50,78],maxWidth){
+      const v=maxWidth===undefined?String(value??''):fit(value,size,maxWidth,bold);
+      cmds.push(`${color(ink)} rg BT /${bold?'F2':'F1'} ${fmt(size)} Tf 1 0 0 1 ${fmt(x)} ${fmt(y)} Tm (${pdfEscape(v)}) Tj ET`);
+      return v;
+    }
+    const NAVY=[14,57,104],BLUE=[17,103,178],LIGHT=[224,239,251],MUTED=[75,102,125],GRID=[189,211,228],YELLOW=[255,238,186];
+    // Bandeau avec logo et identification.
+    rect(20,517,802,66,[255,255,255]);
+    cmds.push(`q 48 0 0 48 22 528 cm /Im1 Do Q`);
+    text('RELEVÉ MENSUEL DES HEURES',81,561,18,true,NAVY,430);
+    text(`CHARRIAUT  •  ${m.label.toUpperCase()}`,82,542,10,true,BLUE,400);
+    rect(567,531,251,49,[239,247,253],[202,222,236]);
+    text(`NOM : ${state.settings.lastName||'À renseigner'}`,577,567,7.4,true,NAVY,230);
+    text(`PRÉNOM : ${state.settings.firstName||'À renseigner'}`,577,557,7.4,false,NAVY,230);
+    text(`E-MAIL : ${state.settings.employeeEmail||'À renseigner'}`,577,547,7,false,NAVY,230);
+    text('DESTINATAIRE : contact@charriaut.fr',577,537,7,false,NAVY,230);
+    line(22,520,819,520,[227,176,60]);
+    // Largeurs réellement calibrées pour une feuille A4 paysage.
+    const widths=[51,48,104,47,48,104,52,53,43,248];
+    const xs=[21];for(const w of widths)xs.push(xs[xs.length-1]+w);
+    const weeks=new Map();
+    for(const row of m.printable){const key=mondayOfKey(row.key);if(!weeks.has(key))weeks.set(key,[]);weeks.get(key).push(row);}
+    const startY=507;
+    const headHeight=16, groupHeight=9.3, totalHeight=10;
+    const actualWeeks=weeks.size;
+    const maxTabular=397;
+    const perRow=Math.min(12.2,Math.max(7.7,(maxTabular-headHeight-actualWeeks*(groupHeight+totalHeight))/Math.max(1,m.printable.length)));
+    let top=startY;
+    rect(xs[0],top-headHeight,800,headHeight,NAVY);
+    const labels=['Date','Embauche','Lieu embauche','Pause','Débauche','Lieu débauche','Travail','Écart','Panier','Observation / Congés / RTT'];
+    for(let i=0;i<labels.length;i++)text(labels[i],xs[i]+3,top-10.8,6.5,true,[255,255,255],widths[i]-5);
+    top-=headHeight;
+    let rIndex=0,notesAbr=false;
+    function putRow(values,colors={}){
+      const bottom=top-perRow;
+      if(rIndex%2===0)rect(xs[0],bottom,800,perRow,[247,250,253]);
+      for(let i=1;i<xs.length-1;i++)line(xs[i],bottom,xs[i],top,GRID);
+      line(xs[0],bottom,xs[10],bottom,GRID);
+      for(let i=0;i<10;i++){
+        const s=i===9?6.3:6.7;
+        const rendered=text(values[i],xs[i]+3,bottom+(perRow-s)/2+1,s,i===0||i===6,colors[i]||[26,57,83],widths[i]-6);
+        if(i===9&&rendered!==String(values[i]).replace(/[\r\n]+/g,' ').trim())notesAbr=true;
+      }
+      top=bottom;rIndex++;
+    }
+    for(const [begin,rows] of weeks){
+      rect(xs[0],top-groupHeight,800,groupHeight,[206,231,245]);
+      const w=m.weeks.find(w=>w.begin===begin);
+      text(`SEMAINE ${pad(w.weekNum)}  •  ${begin.slice(8)}/${begin.slice(5,7)} au ${w.finish.slice(8)}/${w.finish.slice(5,7)}`,xs[0]+4,top-6.8,6.5,true,NAVY);
+      top-=groupHeight;
+      for(const row of rows){
+        const {key,d,calc:c,day}=row;
+        const dt=dateFromKey(key),loc=(field)=>{
+          const l=getLocation(d,field);
+          if(!d[field]||c.off)return '—';
+          return l.type==='bureau'?'BUREAU':l.type==='client'?`CLIENT : ${l.site||'À préciser'}`:'À renseigner';
+        };
+        const off=c.off;
+        const stat=c.leaveType?leaveLabel(c.leaveType):d.off?'Non travaillé':c.invalid?'À corriger':!c.complete?'Incomplet':'';
+        const note=[stat,d.note].filter(Boolean).join(' - ');
+        putRow([`${WEEKDAYS[day]} ${pad(dt.getDate())}`,
+          off?'—':d.start||'—',loc('start'),off?'—':duration(c.pause),off?'—':d.end||'—',loc('end'),
+          off?'—':duration(c.actual),off?'—':signed(c.delta),off?'—':d.meal===true?'Oui':'Non',note],
+          {7:c.delta>0?[16,125,78]:c.delta<0?[173,53,52]:[26,57,83]});
+      }
+      rect(xs[0],top-totalHeight,800,totalHeight,[235,244,250]);
+      text(`TOTAL SEMAINE : ${duration(w.actual)}`,xs[0]+5,top-7,7,true,NAVY);
+      text(`RÉFÉRENCE : ${duration(w.weeklyReference)}`,xs[3]+4,top-7,7,true,NAVY);
+      text(`SOLDE : ${w.allWeekdaysDone?signed(w.gap):'À compléter'}`,xs[7]+6,top-7,7,true,w.gap<0?[173,53,52]:NAVY);
+      top-=totalHeight;
+    }
+    // Les totaux tiennent dans un encart fixe. Aucun débordement possible hors de la page.
+    const summaryTop=88;
+    const boxes=[
+      {x:21,w:188,label:'HEURES TRAVAILLÉES',value:duration(m.actual)},
+      {x:214,w:180,label:'BASE AJUSTÉE (CONGÉS / RTT)',value:duration(m.target)},
+      {x:399,w:263,label:m.incomplete.length?'RELEVÉ INCOMPLET':m.net>0?'SOLDE MENSUEL POSITIF':m.net<0?'SOLDE MENSUEL NÉGATIF':'SOLDE MENSUEL',value:m.incomplete.length?'À compléter':signed(m.net),highlight:true},
+      {x:667,w:154,label:'PANIERS REPAS',value:String(m.meals)}
+    ];
+    for(const b of boxes){rect(b.x,55,b.w,33,b.highlight?YELLOW:LIGHT,[179,210,230]);text(b.label,b.x+8,76,7.2,true,NAVY,b.w-14);text(b.value,b.x+8,61,15.5,true,NAVY,b.w-14);}
+    const vc=m.vehicle.done===true?'OUI':m.vehicle.done===false?'NON':'NON RENSEIGNÉ';
+    text(`CONTRÔLE VÉHICULE : ${vc}   ${m.vehicle.note?'-  '+m.vehicle.note:''}`,23,43,6.8,true,NAVY,791);
+    line(21,36,820,36);
+    text(`Congés : ${m.leaves.filter(r=>r.calc.leaveType==='CP').length} j.    RTT : ${m.leaves.filter(r=>r.calc.leaveType==='RTT').length} j.    •    Écarts journaliers indicatifs ; le traitement des heures supplémentaires est validé par le bureau.`,23,27,6.2,false,MUTED,794);
+    const extra=notesAbr?'Observations longues abrégées : texte intégral conservé dans l’application et le CSV.  ':' ';
+    text(`${extra}Édité le ${formatStamp(new Date().toISOString())}.  •  Semaine chevauchant deux mois : total hebdomadaire complet.`,23,18,5.9,false,MUTED,794);
+    // Calculer une seule page quel que soit le nombre de lignes ; le contenu court est garanti.
+    if(top<89)throw Error('Nombre exceptionnel de lignes : export trop dense pour A4 unique.');
+    const content=cmds.join('\n')+'\n';
+    const pdf=pdfDataBlob(content,jpeg);
+    download(`CHARRIAUT_Releve_${m.month}_${(state.settings.lastName||'salarie').replace(/[^a-zA-Z0-9À-ÿ-]/g,'_')}.pdf`,pdf,'application/pdf');
+  }
+
   // A compact, print-only one-page A4 landscape monthly timesheet.
   function renderPrint(m){
     const place=(d,field)=>{const l=getLocation(d,field);return !d[field]?'—':esc(l.type==='bureau'?'BUREAU':l.type==='client'?`CLIENT · ${l.site||'À préciser'}`:'À renseigner');};
@@ -537,7 +987,7 @@
     const before=getDay(selected);
     state.days[selected]={...before,note:text};
     save();
-    $('dayNoteStatus').textContent=text?'Observation enregistrée ✓':'Enregistrement automatique';
+    $('dayNoteStatus').textContent=writeProblem?'⚠ Non enregistré':text?'Observation enregistrée ✓':'Enregistrement automatique';
   });
   $('offDay').addEventListener('click',()=>{
     const d=getDay(selected);
@@ -569,7 +1019,14 @@
     toast('Mail mensuel préparé. Joins le PDF avant de l’envoyer.');
   });
   $('exportCsv').addEventListener('click',()=>{download(`pointage-charriaut-${reportMonth}.csv`,csvExport(monthData()),'text/csv;charset=utf-8');toast('CSV mensuel prêt.');});
-  $('printPdf').addEventListener('click',()=>{if(!readyProfile())return;const m=monthData();if(!confirmMonth(m))return;renderPrint(m);window.print();});
+  $('printPdf').addEventListener('click',async()=>{
+    if(!readyProfile())return;
+    const m=monthData();if(!confirmMonth(m))return;
+    const btn=$('printPdf');btn.disabled=true;btn.textContent='Création du PDF en cours…';
+    try{await generateMonthlyPdf(m);toast('PDF A4 paysage créé : cherche-le dans Téléchargements / Fichiers.');}
+    catch(error){console.error(error);toast('PDF indisponible : réessaie ou utilise l’export CSV.');}
+    finally{btn.disabled=false;btn.textContent='⬇ Télécharger mon PDF';}
+  });
   function openSettings(){
     $('firstName').value=state.settings.firstName||'';
     $('lastName').value=state.settings.lastName||'';
@@ -578,7 +1035,7 @@
     $('legacyNameNotice').textContent=state.settings.name?`Ancien nom enregistré : ${state.settings.name}. Répartis-le dans les deux champs ci-dessus.`:'';
     $('recipient').value='contact@charriaut.fr';
     const b=state.settings.lastBackupAt;
-    $('backupState').textContent=b?`Dernière sauvegarde lancée : ${formatStamp(b)}. Conserve le fichier téléchargé.`:'Aucune sauvegarde enregistrée. Fais-en une chaque semaine.';
+    $('backupState').textContent=b?`Dernier export demandé : ${formatStamp(b)}. Vérifie le fichier dans Fichiers / Drive.`:'Aucun export externe connu. Fais-en un chaque semaine.';
     $('settingsDialog').showModal();
   }
   $('settingsBtn').addEventListener('click',openSettings);
@@ -601,7 +1058,7 @@
     const days=stamp?Math.floor((Date.now()-stamp)/86400000):null;
     const el=$('quickBackup');
     if(!el)return;
-    el.textContent=days==null?'🛡️ Première sauvegarde de mes heures':days>=7?`⚠️ Sauvegarde à refaire (${days} jours)`:'🛡️ Sauvegarder mes pointages';
+    el.textContent=days==null?'⬇ Faire ma première sauvegarde':days>=7?`⬇ Sauvegarde conseillée (${days} jours)`:'⬇ Sauvegarder une copie dans Fichiers';
     el.classList.toggle('backup-due',days==null||days>=7);
   }
   function backupNow(){
@@ -609,10 +1066,11 @@
     const newState={...state,settings:{...state.settings,lastBackupAt:at}};
     download(`CHARRIAUT_sauvegarde_${dateKey(new Date())}_${(state.settings.lastName||'salarie').replace(/[^a-zA-ZÀ-ÿ0-9-]/g,'_').slice(0,24)}.json`,JSON.stringify({...newState,exportedAt:at},null,2),'application/json;charset=utf-8');
     state=newState;save();updateBackupDisplay();
-    toast('Fichier de sauvegarde téléchargé. Conserve-le en lieu sûr.');
+    toast('Export lancé. Vérifie la présence du fichier dans Fichiers.');
   }
   $('backupBtn').addEventListener('click',backupNow);
   $('quickBackup').addEventListener('click',backupNow);
+  $('quickRestore').addEventListener('click',()=>$('restoreFile').click());
   $('restoreBtn').addEventListener('click',()=>$('restoreFile').click());
   $('restoreFile').addEventListener('change',async e=>{
     const file=e.target.files&&e.target.files[0];if(!file)return;
@@ -623,9 +1081,20 @@
       if(Object.keys(data.days).some(k=>!/^\d{4}-\d{2}-\d{2}$/.test(k)))throw Error('days');
       if(!confirm('Remplacer les données de cette application par la sauvegarde choisie ?'))return;
       state={...defaults(),...data,settings:{...defaults().settings,...data.settings},audit:data.audit&&typeof data.audit==='object'?data.audit:{},leaves:Array.isArray(data.leaves)?data.leaves:[],vehicleChecks:data.vehicleChecks&&typeof data.vehicleChecks==='object'&&!Array.isArray(data.vehicleChecks)?data.vehicleChecks:{}};
-      save();render();$('settingsDialog').close();toast('Sauvegarde restaurée.');
+      const ok=save();render();$('settingsDialog').close();if(ok)toast('Sauvegarde restaurée et enregistrée.');
     }catch(err){toast('Fichier de sauvegarde invalide.');}finally{e.target.value='';}
   });
+  // Récupération d'une copie IndexedDB si la clé historique locale est vide.
+  idbRead().then(json=>{
+    const recovered=validState(json);
+    if(!recovered)return;
+    const currentHasData=Object.keys(state.days).length || state.leaves.length || Object.keys(state.vehicleChecks).length;
+    if(!currentHasData && (Object.keys(recovered.days).length || recovered.leaves.length || Object.keys(recovered.vehicleChecks).length)){
+      state=recovered;
+      const ok=save();render();
+      if(ok)toast('Une copie de secours locale a permis de retrouver les pointages.');
+    }
+  }).catch(()=>{});
   if('serviceWorker' in navigator && /^https?:$/.test(location.protocol)){
     window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
   }
@@ -661,9 +1130,9 @@
   $('navDocs').addEventListener('click',()=>toPanel('monthCard'));
   $('menuBtn').addEventListener('click',()=>{const el=$('dateDisclosure');el.open=!el.open;if(el.open)toPanel('dateDisclosure');});
   document.querySelectorAll('[data-menu-target]').forEach(el=>el.addEventListener('click',()=>{$('menuPanel').hidden=true;$('menuBtn').setAttribute('aria-expanded','false');toPanel(el.dataset.menuTarget);}));
-  render();updateConnection();
+  render();updateConnection();updateSaveStatus(!writeProblem);
   const hasProfile=!!(state.settings.firstName&&state.settings.lastName&&state.settings.employeeEmail);
   if(!hasProfile){window.setTimeout(()=>{if(!$('settingsDialog').open)openSettings();},500);}
   // Export tested arithmetic to browser for optional on-device diagnostic (read-only).
-  window.Pointage39hVersion='12.0.0-CHARRIAUT-Entreprise-Panier';
+  window.Pointage39hVersion='13.0.0-CHARRIAUT-PDF-Sauvegarde';
 })();
