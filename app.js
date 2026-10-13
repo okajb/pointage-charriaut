@@ -278,13 +278,18 @@
       if(src){setLocation(el.dataset.copyPlace,src.type,src.site);toast('Lieu précédent repris ✓');}
     }));
     const isLegacy=d.breakMode==='legacy';
-    const currentPreset=d.breakMinutes===20?'20':d.breakMinutes===60?'60':d.breakMinutes===120?'120':'custom';
+    const isStarred=!isLegacy && d.breakMinutes===0;
+    const starButton=$('starNoBreak');
+    starButton.disabled=disabledDay;
+    starButton.classList.toggle('selected',isStarred);
+    starButton.setAttribute('aria-pressed',String(isStarred));
+    const currentPreset=d.breakMinutes===20?'20':d.breakMinutes===60?'60':d.breakMinutes===120?'120':d.breakMinutes===0?'star':'custom';
     $('pauseOptions').querySelectorAll('[data-break]').forEach(btn=>{
       const active=!isLegacy&&d.breakMinutes!==null&&btn.dataset.break===currentPreset || (!isLegacy&&d.breakPlan==='custom'&&d.breakMinutes===null&&btn.dataset.break==='custom');
       btn.classList.toggle('selected',active);btn.setAttribute('aria-pressed',String(active));btn.disabled=disabledDay;
     });
     const custom=$('customBreak');
-    custom.hidden=disabledDay||isLegacy||!(d.breakPlan==='custom'||(d.breakMinutes!==null&&![20,60,120].includes(d.breakMinutes)));
+    custom.hidden=disabledDay||isLegacy||isStarred||!(d.breakPlan==='custom'||(d.breakMinutes!==null&&![20,60,120].includes(d.breakMinutes)));
     $('customBreakMinutes').value=d.breakMinutes==null?'':String(d.breakMinutes);
     const legacy=$('legacyBreak');
     legacy.hidden=!isLegacy||disabledDay;
@@ -322,7 +327,7 @@
     $('weekRows').innerHTML=w.rows.map(({key,d,calc:c,day})=>{
       const pause=c.off?'—':c.pause===null?'—':duration(c.pause);
       const desc=`${WEEKDAYS[day]} ${dateFromKey(key).getDate()}${c.pause===0&&c.complete?' ⭐':''}`;
-      const sheetEnd=c.credit&&d.end?`${clock(minutes(d.end)+20)}*`:'—';
+      const sheetEnd=c.off?'—':c.credit&&d.end?`${clock(minutes(d.end)+20)}*`:d.end||'—';
       return `<tr><td>${desc}</td><td>${c.off?'Repos':duration(c.actual)}</td><td>${pause}</td><td class="star">${sheetEnd}</td><td class="${c.delta>0?'positive':c.delta<0?'negative':''}">${c.off?'—':signed(c.delta)}</td></tr>`;
     }).join('')+`<tr class="weekly-footer"><td><strong>Total</strong></td><td><strong>${duration(w.actual)}</strong></td><td>—</td><td>—</td><td class="${w.gap>0?'positive':w.gap<0?'negative':''}"><strong>${w.allWeekdaysDone?signed(w.gap):'À compléter'}¹</strong></td></tr>`;
     $('weekRows').parentElement.setAttribute('aria-label',`Semaine du ${dateRange()}`);
@@ -336,12 +341,15 @@
     if(d.off||leaveOn(selected)){toast('Cette journée est non travaillée.');return;}
     const legacy=d.breakMode==='legacy'&&(d.lunchOut||d.lunchIn);
     if(legacy&&!confirm('Passer à une durée de pause remplacera les deux anciens horaires du midi dans le calcul. Les modifications seront tracées. Continuer ?'))return;
-    const value=picked==='custom'?null:Number(picked);
-    setDay(selected,{breakMode:'duration',breakPlan:picked==='custom'?'custom':picked,breakMinutes:value,noBreak:false});
+    const value=picked==='custom'?null:picked==='star'?0:Number(picked);
+    // L'étoile correspond à 0 minute de pause réelle, jamais à une pause fictive.
+    if(picked==='star')state.settings.creditEnabled=true;
+    setDay(selected,{breakMode:'duration',breakPlan:picked==='custom'?'custom':picked,breakMinutes:value,noBreak:value===0});
     if(picked==='custom'){
       $('customBreakMinutes').focus();
       toast('Indique la durée réelle en minutes, puis valide.');
-    }else toast(`Pause de ${duration(value)} enregistrée ✓`);
+    }else if(picked==='star')toast('⭐ Pause non prise enregistrée. Heure de sortie réelle conservée.');
+    else toast(`Pause de ${duration(value)} enregistrée ✓`);
   }
   function dayText(row){
     const {key,d,calc:c,day}=row;
@@ -408,7 +416,7 @@
   }
   function csvExport(m){
     const q=value=>{const raw=String(value??'');const safe=/^[=+@\-\t\r]/.test(raw)?"'"+raw:raw;return `"${safe.replace(/"/g,'""')}"`;};
-    const rows=[['Date','Jour','Embauche','Lieu embauche','Pause (min)','Débauche réelle','Fin ajustée (*)','Lieu débauche','Heures travaillées (min)','Écart jour (min)','Panier repas','Statut','Note']];
+    const rows=[['Date','Jour','Embauche','Lieu embauche','Pause (min)','Débauche réelle','Débauche ajustée (*)','Lieu débauche','Heures travaillées (min)','Écart jour (min)','Panier repas','Statut','Note']];
     m.rows.forEach(({key,d,calc:c,day})=>rows.push([key,WEEKDAYS[day],c.off?'':d.start,c.off?'':locationLabel(getLocation(d,'start')),c.pause??'',c.off?'':d.end,c.credit&&d.end?clock(minutes(d.end)+20)+'*':'',c.off?'':locationLabel(getLocation(d,'end')),c.off?'':c.actual??'',c.off?'':c.delta??'',c.off?'':d.meal===true?'Oui':d.meal===false?'Non':'',c.leaveType?leaveLabel(c.leaveType):c.off?'Non travaillé':c.complete?'Complet':'Incomplet',d.note||'']));
     rows.push([]);
     rows.push(['TOTAL MOIS',m.label,'Heures travaillées (min)',m.actual,'Référence ajustée (min)',m.target,'Solde indicatif (min)',m.incomplete.length?'À compléter':m.net,'Paniers repas',m.meals,'Contrôle véhicule',m.vehicle.done===true?'Oui':m.vehicle.done===false?'Non':'Non renseigné']);
@@ -523,6 +531,7 @@
   $('nextWeek').addEventListener('click',()=>moveWeek(7));
   function moveWeek(n){activeWeek=dateKey(plusDays(dateFromKey(activeWeek),n));selected=activeWeek===mondayOfKey(todayKey)?todayKey:activeWeek;render();}
   $('pauseOptions').querySelectorAll('[data-break]').forEach(btn=>btn.addEventListener('click',()=>setBreak(btn.dataset.break)));
+  $('starNoBreak').addEventListener('click',()=>setBreak(getDay(selected).breakMode==='duration'&&getDay(selected).breakMinutes===0?'20':'star'));
   $('customBreakMinutes').addEventListener('change',e=>{
     const val=e.target.value.trim();
     if(val==='' || !/^\d+$/.test(val) || Number(val)>600){toast('Indique une durée entre 0 et 600 minutes.');return;}
@@ -642,5 +651,5 @@
   const hasProfile=!!(state.settings.firstName&&state.settings.lastName&&state.settings.employeeEmail);
   if(!hasProfile){window.setTimeout(()=>{if(!$('settingsDialog').open)openSettings();},500);}
   // Export tested arithmetic to browser for optional on-device diagnostic (read-only).
-  window.Pointage39hVersion='4.0.0-CHARRIAUT-Entreprise-Conges-Paniers-Vehicule';
+  window.Pointage39hVersion='10.0.0-CHARRIAUT-Entreprise-Etoile';
 })();

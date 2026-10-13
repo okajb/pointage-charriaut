@@ -309,3 +309,16 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline-color:#f
   .print-sheet .p-vehicle-row,
   .print-sheet .p-month-foot { break-inside:avoid!important; page-break-inside:avoid!important; }
 }
+
+/* CHARRIAUT V10 : option étoile visible sans passer par « Autre / 0 min ». */
+.no-break-button{margin-top:10px;width:100%;display:flex;align-items:center;gap:11px;text-align:left;border:1.5px solid #e7cf94;background:#fff9e9;color:#755315;border-radius:13px;padding:12px 13px;cursor:pointer;transition:background .15s,border-color .15s,box-shadow .15s;min-height:64px}
+.no-break-button .no-break-star{font-size:25px;flex-shrink:0}
+.no-break-button .no-break-copy{display:flex;flex-direction:column;gap:3px;flex:1;min-width:0}
+.no-break-button strong{font-size:13px;line-height:1.25}
+.no-break-button small{font-size:10.5px;line-height:1.32;color:#806c48}
+.no-break-button .no-break-check{border-radius:50%;width:25px;height:25px;display:grid;place-items:center;color:transparent;background:#fff;border:1px solid #e1cd96;flex-shrink:0;font-weight:900}
+.no-break-button.selected{background:#ffedbd;border-color:#cf950e;box-shadow:inset 0 0 0 1px #cf950e}
+.no-break-button.selected .no-break-check{background:#b97908;border-color:#b97908;color:white}
+.no-break-button:focus-visible{outline:3px solid #589fc1;outline-offset:2px}
+.no-break-button:disabled{opacity:.5;cursor:not-allowed}
+@media print{.no-break-button{display:none!important}}

@@ -1,3 +1,9 @@
+POINTAGE CHARRIAUT – ENTREPRISE V10 ⭐ – PAUSE NON PRISE
+
+NOUVEAUTÉ : un bouton ⭐ « Pause de 20 min non prise » apparaît directement sous les choix de pause. Enregistre 0 min de pause réellement prise. Pour revenir à la normale, choisir 20 min, 1 h, 2 h ou Autre. L’heure de débauche réellement pointée reste enregistrée. Le relevé affiche une heure équivalente marquée * et conserve la véritable heure en petit dessous. Les calculs d’heures reposent toujours sur les heures réellement travaillées.
+
+IMPORTANT : la pause réglementaire doit être prise ; ce bouton sert à documenter une pause manquée, pas à prétendre qu’elle a été effectuée.
+
 POINTAGE CHARRIAUT — ENTREPRISE V9.1 — A4 PAYSAGE
 =================================================
 
