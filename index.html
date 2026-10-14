@@ -12,6 +12,7 @@
 <link rel="icon" type="image/png" sizes="192x192" href="assets/icon-192.png">
 <link rel="apple-touch-icon" href="assets/icon-180.png">
 <link rel="stylesheet" href="styles.css?v=14">
+<link rel="stylesheet" href="pompes.css?v=15">
 <title>CHARRIAUT · Pointage équipe V14</title>
 </head>
 <body>
@@ -58,6 +59,7 @@
         <button type="button" id="shortcutHistory" class="quick-tile"><span class="quick-symbol history">◴</span><span>Historique</span></button>
         <button type="button" id="shortcutLeave" class="quick-tile"><span class="quick-symbol holiday">▦</span><span>Congés / RTT</span></button>
       </nav>
+      <button type="button" id="pumpsOpen" class="pump-entry"><span class="pump-entry-icon">🛠</span><span class="pump-entry-text"><strong>ENTRETIEN DES POMPES À VIDE</strong><small>TESTO (orange) · VALUE (bleue) · Utilisations et vidanges</small></span><span aria-hidden="true">›</span></button>
       <div class="mini-mail-note" role="note">ⓘ &nbsp; Rappel fin de mois : envoi à <strong>contact@charriaut.fr</strong></div>
       <div class="day-totals" id="dayTotals"></div>
       <details class="pointing-details"><summary>✎ Corriger une heure ou consulter les modifications</summary>
@@ -157,5 +159,6 @@
 <section class="print-sheet" id="printSheet" aria-hidden="true"></section>
 <div id="toast" role="status" aria-live="polite"></div>
 <script src="app.js?v=14" defer></script>
+<script src="pompes.js?v=15" defer></script>
 </body>
 </html>
