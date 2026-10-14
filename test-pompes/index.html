@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<meta name="theme-color" content="#0c477c">
+<title>CHARRIAUT · Essai Firebase des pompes</title>
+<style>
+:root{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#173148;background:#eef4f9}
+*{box-sizing:border-box}body{margin:0}.wrap{width:min(660px,calc(100% - 28px));margin:24px auto 80px}
+header{background:#0d4878;color:white;padding:22px;border-radius:19px;box-shadow:0 9px 22px #10375919}
+header small{letter-spacing:1px;font-size:11px;color:#cde4f6;font-weight:700}h1{font-size:24px;margin:8px 0}.sub{font-size:13px;line-height:1.5;color:#d6e9f6;margin-bottom:0}
+section{padding:20px;background:white;border-radius:16px;margin:15px 0;border:1px solid #dce8f0}
+h2{font-size:17px;margin:0 0 12px}p{font-size:14px;line-height:1.55}.notice{font-size:13px;background:#fff5e1;border-left:4px solid #dca23a;border-radius:6px;padding:12px;margin:14px 0}
+label{display:block;font-weight:750;font-size:13px;margin-bottom:9px}input{width:100%;padding:13px;font-size:16px;border:1px solid #b9cad7;border-radius:10px}
+button{border:0;color:white;background:#0a6bad;border-radius:10px;padding:13px 18px;margin-top:13px;font-size:14px;font-weight:800;cursor:pointer}button:disabled{opacity:.45;cursor:wait}
+aside{font-size:12px;color:#617689;margin-top:12px;line-height:1.4}
+.pump{border:2px solid #e1e8ee;border-radius:14px;padding:14px;margin:11px 0;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.pump.orange{border-color:#e6a054;background:#fff8f0}.pump.blue{border-color:#5e9ce5;background:#f1f7ff}
+.pump b{font-size:20px;display:block}.pump small{font-size:12px;color:#60788b}.pump .mark{font-size:24px}
+.status{font-weight:700}.status.error{color:#a73527}.status.ok{color:#15734d}
+.logout{background:#eaf2fa;color:#20517b}
+#app[hidden],#login[hidden],#ready[hidden]{display:none!important}
+footer{font-size:12px;text-align:center;color:#698096;margin:20px 0}
+a{color:#0b5797}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header><small>CHARRIAUT · ESPACE MATÉRIEL</small><h1>Essai du suivi des pompes à vide</h1><p class="sub">TESTO et VALUE — vérification de la connexion Firebase, sans modification du pointage V14.</p></header>
+<div class="notice">Cette page sert uniquement à vérifier la connexion et la lecture des données communes. Les boutons Départ, Fin et Vidange ne sont pas disponibles ici. Aucune donnée de pompe ne peut être modifiée depuis cette page.</div>
+<section id="login">
+<h2>1. Connexion sécurisée par e-mail</h2>
+<p>Utilise l'adresse que nous avons autorisée dans Firebase. Pas de mot de passe.</p>
+<form id="loginForm"><label for="email">Ton adresse e-mail</label><input id="email" type="email" autocomplete="email" required placeholder="prenom.nom@exemple.fr"><button id="sendLink" type="submit">Recevoir un lien de connexion</button></form>
+<aside>Sur le forfait gratuit Spark, Firebase limite les liens de connexion envoyés à 5 par jour. Si possible, ouvre le lien depuis le même navigateur (Chrome ou Safari).</aside>
+</section>
+<section id="ready" hidden>
+<h2>2. Accès reconnu <span aria-hidden="true">✅</span></h2>
+<p id="who"></p><button type="button" id="logout" class="logout">Me déconnecter</button>
+<h2 style="margin-top:24px">Pompes à vide partagées</h2>
+<div class="pump orange"><div><b>TESTO</b><small id="testo-info">Lecture en cours…</small></div><span class="mark">🛠️</span></div>
+<div class="pump blue"><div><b>VALUE</b><small id="value-info">Lecture en cours…</small></div><span class="mark">🛠️</span></div>
+<aside>Pour chaque pompe, les 10 h affichées désignent la fréquence de vidange. Si aucune vidange initiale n'est saisie, nous n'affichons pas de compteur de temps fictif.</aside>
+</section>
+<section><h2>État de la connexion</h2><p id="status" class="status" role="status" aria-live="polite">Initialisation de Firebase…</p></section>
+<footer>Essai technique uniquement · <a href="../">Retour à l'application Charriaut existante</a></footer>
+</div>
+<script type="module">
+import {initializeApp} from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js';
+import {getAuth,onAuthStateChanged,isSignInWithEmailLink,signInWithEmailLink,sendSignInLinkToEmail,signOut} from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js';
+import {getFirestore,doc,getDoc,onSnapshot} from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
+const config={
+  apiKey:"AIzaSyAtm8CARaeWyh_ncvjcxATTOJQS3ppyZNc",
+  authDomain:"charriaut-entretien.firebaseapp.com",
+  projectId:"charriaut-entretien",
+  storageBucket:"charriaut-entretien.firebasestorage.app",
+  messagingSenderId:"878437191970",
+  appId:"1:878437191970:web:f2a2ac7319d48b9113957b"
+};
+const app=initializeApp(config),auth=getAuth(app),db=getFirestore(app);
+const $=id=>document.getElementById(id);
+let removeListeners=[];
+const setStatus=(text,bad=false)=>{$('status').textContent=text;$('status').className='status '+(bad?'error':'ok');};
+const stop=()=>{removeListeners.forEach(un=>un());removeListeners=[];};
+const msg=e=>String(e?.message||e||'Erreur inconnue');
+$('loginForm').addEventListener('submit',async e=>{
+ e.preventDefault();
+ const email=$('email').value.trim().toLowerCase();
+ $('sendLink').disabled=true;setStatus('Envoi du lien en cours…');
+ try {
+  const redirect=new URL(window.location.pathname,window.location.origin).href;
+  await sendSignInLinkToEmail(auth,email,{url:redirect,handleCodeInApp:true});
+  localStorage.setItem('charriaut-pompes-test-email',email);
+  setStatus('Lien demandé à Firebase. Consulte tes e-mails et clique sur le lien de connexion.');
+ } catch(error){setStatus('Envoi impossible : '+msg(error),true);}
+ finally{$('sendLink').disabled=false;}
+});
+$('logout').addEventListener('click',async()=>{await signOut(auth);setStatus('Déconnecté.');});
+async function load(){
+ if(!isSignInWithEmailLink(auth,location.href))return;
+ let email=localStorage.getItem('charriaut-pompes-test-email');
+ if(!email)email=prompt('Confirme ton adresse e-mail pour terminer ta connexion :');
+ if(!email)return;
+ try {
+  setStatus('Vérification du lien en cours…');
+  await signInWithEmailLink(auth,email.trim().toLowerCase(),location.href);
+  localStorage.removeItem('charriaut-pompes-test-email');
+  history.replaceState(null,'',new URL(location.pathname,location.origin).href);
+ }catch(e){setStatus('Lien non validé : '+msg(e),true);}
+}
+onAuthStateChanged(auth,async user=>{
+ stop();
+ $('ready').hidden=true;$('login').hidden=false;
+ if(!user){setStatus('Non connecté — demande un lien ci-dessus.');return;}
+ try {
+  if(!user.emailVerified||!user.email)throw Error('L’adresse e-mail du compte doit être vérifiée.');
+  const email=user.email.toLowerCase();
+  const authDoc=await getDoc(doc(db,'authorizedEmployees',email));
+  if(!authDoc.exists()||authDoc.data().active!==true)throw Error('Cette adresse n’est pas autorisée pour Charriaut.');
+  $('who').textContent='Compte autorisé : '+email;
+  $('login').hidden=true;$('ready').hidden=false;
+  setStatus('Compte reconnu. Lecture des deux pompes en temps réel…');
+  for(const id of ['testo','value']){
+   removeListeners.push(onSnapshot(doc(db,'pumps',id),snapshot=>{
+    const target=$(id+'-info');
+    if(!snapshot.exists()){target.textContent='Fiche absente';setStatus('Pompe '+id+' introuvable.',true);return;}
+    const data=snapshot.data(),hours=data.oilIntervalHours||10;
+    target.textContent='Vidange : toutes les '+hours+' h · '+(typeof data.usedSeconds==='number'?'Compteur enregistré : '+Math.floor(data.usedSeconds/3600)+' h '+Math.floor((data.usedSeconds%3600)/60)+' min':'Compteur à initialiser après vidange');
+    setStatus('Connexion Firebase active. Les pompes sont lisibles en temps réel.');
+   },e=>setStatus('Accès refusé pour '+id+' : '+msg(e),true)));
+  }
+ }catch(e){setStatus('Accès non autorisé : '+msg(e),true);}
+});
+load();
+</script>
+</body>
+</html>
