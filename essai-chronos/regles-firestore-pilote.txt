@@ -1,6 +1,8 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
+
     function isEmployee() {
       return request.auth != null
         && request.auth.token.email_verified == true
@@ -8,105 +10,23 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/authorizedEmployees/$(request.auth.token.email))
         && get(/databases/$(database)/documents/authorizedEmployees/$(request.auth.token.email)).data.active == true;
     }
-    function isAdmin() {
-      return isEmployee()
-        && get(/databases/$(database)/documents/authorizedEmployees/$(request.auth.token.email)).data.get('role','') == 'admin';
-    }
+
     function isImporter() {
       return isEmployee()
         && get(/databases/$(database)/documents/authorizedEmployees/$(request.auth.token.email)).data.get('role','') == 'admin';
     }
 
-
     match /authorizedEmployees/{email} {
-      allow get: if isEmployee() && request.auth.token.email == email;
+      allow get: if isEmployee()
+        && request.auth.token.email == email;
       allow list, write: if false;
     }
+
     match /pumps/{pumpId} {
-      function changedOnly(keys) {
-        return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys);
-      }
-      function goodInit() {
-        return isAdmin()
-          && resource.data.get('trackingStartedAt',null) == null
-          && resource.data.get('activeSession',null) == null
-          && resource.data.get('usedSeconds',0) == 0
-          && resource.data.get('lifetimeSeconds',0) == 0
-          && request.resource.data.usedSeconds == 0
-          && request.resource.data.lifetimeSeconds == 0
-          && request.resource.data.trackingStartedAt == request.time
-          && request.resource.data.trackingInitializedBy == request.auth.token.email
-          && request.resource.data.oilCondition == 'unverified'
-          && request.resource.data.lastActionAt == request.time
-          && changedOnly(['usedSeconds','lifetimeSeconds','trackingStartedAt',
-                          'trackingInitializedBy','oilCondition','lastActionAt']);
-      }
-      function goodStart() {
-        let original = resource.data.get('activeSession', null);
-        let next = request.resource.data.get('activeSession',null);
-        return original == null
-          && resource.data.get('trackingStartedAt',null) is timestamp
-          && resource.data.get('usedSeconds',null) is int
-          && next is map
-          && next.keys().hasOnly(['byUid','byEmail','byName','gas','job','note','startedAt'])
-          && next.keys().hasAll(['byUid','byEmail','byName','gas','job','note','startedAt'])
-          && next.byUid == request.auth.uid
-          && next.byEmail == request.auth.token.email
-          && next.byName is string && next.byName.size() > 0 && next.byName.size() <= 90
-          && next.gas is string && next.gas.size() > 0 && next.gas.size() <= 80
-          && next.job is string && next.job.size() <= 80
-          && next.note is string && next.note.size() <= 600
-          && next.startedAt == request.time
-          && request.resource.data.lastActionAt == request.time
-          && changedOnly(['activeSession','lastActionAt']);
-      }
-      function goodStop() {
-        let original = resource.data.get('activeSession',null);
-        let next = request.resource.data;
-        let evt = getAfter(/databases/$(database)/documents/pumps/$(pumpId)/events/$(next.lastEventId)).data;
-        return original is map
-          && next.activeSession == null
-          && next.lastActionAt == request.time
-          && next.lastEventId is string
-          && changedOnly(['activeSession','usedSeconds','lifetimeSeconds','lastActionAt','lastEventId'])
-          && evt.type == 'usage'
-          && evt.at == request.time
-          && evt.seconds is int && evt.seconds >= 1 && evt.seconds <= 172800
-          && evt.startedAt == original.startedAt
-          && evt.byEmail == original.byEmail
-          && evt.byUid == original.byUid
-          && evt.person == original.byName
-          && evt.gas == original.gas
-          && evt.job == original.job
-          && evt.note == original.note
-          && evt.endedByUid == request.auth.uid
-          && next.usedSeconds == resource.data.get('usedSeconds',0) + evt.seconds
-          && next.lifetimeSeconds == resource.data.get('lifetimeSeconds',0) + evt.seconds
-          && request.time >= original.startedAt
-          && (request.time - original.startedAt) <= duration.value(evt.seconds + 120,'s')
-          && (request.time - original.startedAt) + duration.value(120,'s') >= duration.value(evt.seconds,'s');
-      }
-      function goodOil() {
-        let next = request.resource.data;
-        let evt = getAfter(/databases/$(database)/documents/pumps/$(pumpId)/events/$(next.lastEventId)).data;
-        return resource.data.get('activeSession',null) == null
-          && next.get('activeSession',null) == null
-          && next.usedSeconds == 0
-          && next.lastOilAt == request.time
-          && next.oilCondition == 'changed'
-          && next.lastActionAt == request.time
-          && next.lastEventId is string
-          && changedOnly(['usedSeconds','lastOilAt','oilCondition','lastActionAt','lastEventId'])
-          && evt.type == 'oil'
-          && evt.at == request.time
-          && evt.byEmail == request.auth.token.email
-          && evt.byUid == request.auth.uid
-          && evt.previousSeconds == resource.data.get('usedSeconds',0);
-      }
-      allow get: if pumpId in ['testo','value'] && isEmployee();
-      allow list, create, delete: if false;
-      allow update: if pumpId in ['testo','value'] && isAdmin()
-        && (goodInit() || goodStart() || goodStop() || goodOil());
+      allow read: if isEmployee()
+        && pumpId in ['testo', 'value'];
+      allow write: if false;
+
       match /history/{recordId} {
         allow read: if isEmployee() && pumpId in ['testo', 'value'];
 
@@ -158,9 +78,113 @@ service cloud.firestore {
 
         allow update, delete: if false;
       }
+    }
+
+    match /pilotPumps/{pumpId} {
+      function changedOnly(keys) {
+        return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys);
+      }
+      function goodInit() {
+        return isImporter()
+          && resource.data.get('trackingStartedAt',null) == null
+          && resource.data.get('activeSession',null) == null
+          && resource.data.get('usedSeconds',0) == 0
+          && resource.data.get('lifetimeSeconds',0) == 0
+          && request.resource.data.usedSeconds == 0
+          && request.resource.data.lifetimeSeconds == 0
+          && request.resource.data.trackingStartedAt == request.time
+          && request.resource.data.trackingInitializedBy == request.auth.token.email
+          && request.resource.data.oilCondition == 'unverified'
+          && request.resource.data.lastActionAt == request.time
+          && changedOnly(['usedSeconds','lifetimeSeconds','trackingStartedAt',
+                          'trackingInitializedBy','oilCondition','lastActionAt']);
+      }
+      function goodStart() {
+        let original = resource.data.get('activeSession', null);
+        let next = request.resource.data.get('activeSession',null);
+        return original == null
+          && resource.data.get('trackingStartedAt',null) is timestamp
+          && resource.data.get('usedSeconds',null) is int
+          && next is map
+          && next.keys().hasOnly(['byUid','byEmail','byName','gas','job','note','startedAt'])
+          && next.keys().hasAll(['byUid','byEmail','byName','gas','job','note','startedAt'])
+          && next.byUid == request.auth.uid
+          && next.byEmail == request.auth.token.email
+          && next.byName is string && next.byName.size() > 0 && next.byName.size() <= 90
+          && next.gas is string && next.gas.size() > 0 && next.gas.size() <= 80
+          && next.job is string && next.job.size() <= 80
+          && next.note is string && next.note.size() <= 600
+          && next.startedAt == request.time
+          && request.resource.data.lastActionAt == request.time
+          && changedOnly(['activeSession','lastActionAt']);
+      }
+      function goodStop() {
+        let original = resource.data.get('activeSession',null);
+        let next = request.resource.data;
+        let evt = getAfter(/databases/$(database)/documents/pilotPumps/$(pumpId)/events/$(next.lastEventId)).data;
+        return original is map
+          && next.activeSession == null
+          && next.lastActionAt == request.time
+          && next.lastEventId is string
+          && changedOnly(['activeSession','usedSeconds','lifetimeSeconds','lastActionAt','lastEventId'])
+          && evt.type == 'usage'
+          && evt.at == request.time
+          && evt.seconds is int && evt.seconds >= 1 && evt.seconds <= 172800
+          && evt.startedAt == original.startedAt
+          && evt.byEmail == original.byEmail
+          && evt.byUid == original.byUid
+          && evt.person == original.byName
+          && evt.gas == original.gas
+          && evt.job == original.job
+          && evt.note == original.note
+          && evt.endedByUid == request.auth.uid
+          && next.usedSeconds == resource.data.get('usedSeconds',0) + evt.seconds
+          && next.lifetimeSeconds == resource.data.get('lifetimeSeconds',0) + evt.seconds
+          && request.time >= original.startedAt
+          && (request.time - original.startedAt) <= duration.value(evt.seconds + 120,'s')
+          && (request.time - original.startedAt) + duration.value(120,'s') >= duration.value(evt.seconds,'s');
+      }
+      function goodOil() {
+        let next = request.resource.data;
+        let evt = getAfter(/databases/$(database)/documents/pilotPumps/$(pumpId)/events/$(next.lastEventId)).data;
+        return resource.data.get('activeSession',null) == null
+          && next.get('activeSession',null) == null
+          && next.usedSeconds == 0
+          && next.lastOilAt == request.time
+          && next.oilCondition == 'changed'
+          && next.lastActionAt == request.time
+          && next.lastEventId is string
+          && changedOnly(['usedSeconds','lastOilAt','oilCondition','lastActionAt','lastEventId'])
+          && evt.type == 'oil'
+          && evt.at == request.time
+          && evt.byEmail == request.auth.token.email
+          && evt.byUid == request.auth.uid
+          && evt.previousSeconds == resource.data.get('usedSeconds',0);
+      }
+      allow get: if pumpId in ['testo','value'] && isEmployee();
+      allow list, delete: if false;
+      allow create: if pumpId in ['testo','value'] && isImporter()
+        && request.resource.data.keys().hasAll([
+          'name','color','oilIntervalHours','usedSeconds','lifetimeSeconds',
+          'activeSession','createdAt','createdBy'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'name','color','oilIntervalHours','usedSeconds','lifetimeSeconds',
+          'activeSession','createdAt','createdBy'
+        ])
+        && request.resource.data.name == (pumpId == 'testo' ? 'TESTO' : 'VALUE')
+        && request.resource.data.color == (pumpId == 'testo' ? 'orange' : 'blue')
+        && request.resource.data.oilIntervalHours == 10
+        && request.resource.data.usedSeconds == 0
+        && request.resource.data.lifetimeSeconds == 0
+        && request.resource.data.activeSession == null
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.createdBy == request.auth.token.email;
+      allow update: if pumpId in ['testo','value'] && isImporter()
+        && (goodInit() || goodStart() || goodStop() || goodOil());
       match /events/{eventId} {
         function linkedToPump() {
-          let after = getAfter(/databases/$(database)/documents/pumps/$(pumpId)).data;
+          let after = getAfter(/databases/$(database)/documents/pilotPumps/$(pumpId)).data;
           return after.lastEventId == eventId && after.lastActionAt == request.time;
         }
         function validEvent() {
@@ -184,7 +208,7 @@ service cloud.firestore {
                 && e.previousSeconds is int && e.previousSeconds >= 0));
         }
         allow read: if pumpId in ['testo','value'] && isEmployee();
-        allow create: if pumpId in ['testo','value'] && isAdmin() && validEvent() && linkedToPump();
+        allow create: if pumpId in ['testo','value'] && isImporter() && validEvent() && linkedToPump();
         allow update, delete: if false;
       }
     }
