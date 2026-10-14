@@ -8,6 +8,12 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/authorizedEmployees/$(request.auth.token.email))
         && get(/databases/$(database)/documents/authorizedEmployees/$(request.auth.token.email)).data.active == true;
     }
+    function isImporter() {
+      return isEmployee()
+        && get(/databases/$(database)/documents/authorizedEmployees/$(request.auth.token.email)).data.get('role','') == 'admin';
+    }
+
+
     match /authorizedEmployees/{email} {
       allow get: if isEmployee() && request.auth.token.email == email;
       allow list, write: if false;
@@ -79,6 +85,57 @@ service cloud.firestore {
       allow list, create, delete: if false;
       allow update: if pumpId in ['testo','value'] && isEmployee()
         && (goodStart() || goodStop() || goodOil());
+      match /history/{recordId} {
+        allow read: if isEmployee() && pumpId in ['testo', 'value'];
+
+        allow create: if isImporter()
+          && pumpId in ['testo', 'value']
+          && recordId.matches('legacy-2026-sheet-r[0-9]{3}-(testo|value)')
+          && recordId.matches('.*-' + pumpId)
+          && request.resource.data.keys().hasAll([
+            'pumpId','type','sourceRow','sourceName','sourceSheet','sourceYear',
+            'isHistorical','date','dateAsWritten','durationMinutes','operation',
+            'client','gasAsWritten','employee','importedBy','importedAt'
+          ])
+          && request.resource.data.keys().hasOnly([
+            'pumpId','type','sourceRow','sourceName','sourceSheet','sourceYear',
+            'isHistorical','date','dateAsWritten','durationMinutes','operation',
+            'client','gasAsWritten','employee','importedBy','importedAt'
+          ])
+          && request.resource.data.pumpId == pumpId
+          && request.resource.data.isHistorical == true
+          && request.resource.data.sourceYear == 2026
+          && request.resource.data.sourceName == 'Temps pompe vide'
+          && request.resource.data.sourceSheet == 'Feuille 1'
+          && request.resource.data.sourceRow is int
+          && request.resource.data.sourceRow >= 2
+          && request.resource.data.sourceRow <= 40
+          && request.resource.data.type in ['usage','oil']
+          && (request.resource.data.date == null ||
+              (request.resource.data.date is string &&
+               request.resource.data.date.matches('2026-[0-9]{2}-[0-9]{2}')))
+          && (request.resource.data.dateAsWritten == null ||
+              request.resource.data.dateAsWritten is string)
+          && (request.resource.data.operation == null ||
+              request.resource.data.operation is string)
+          && (request.resource.data.client == null ||
+              request.resource.data.client is string)
+          && (request.resource.data.gasAsWritten == null ||
+              request.resource.data.gasAsWritten is string)
+          && (request.resource.data.employee == null ||
+              request.resource.data.employee is string)
+          && ((request.resource.data.type == 'usage'
+               && request.resource.data.durationMinutes is int
+               && request.resource.data.durationMinutes > 0
+               && request.resource.data.durationMinutes <= 1440)
+              ||
+              (request.resource.data.type == 'oil'
+               && request.resource.data.durationMinutes == null))
+          && request.resource.data.importedBy == request.auth.token.email
+          && request.resource.data.importedAt == request.time;
+
+        allow update, delete: if false;
+      }
       match /events/{eventId} {
         function linkedToPump() {
           let after = getAfter(/databases/$(database)/documents/pumps/$(pumpId)).data;
