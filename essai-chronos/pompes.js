@@ -56,8 +56,27 @@ const userProfile=()=>{
   }catch(e){return {name:'',email:''};}
 };
 const PILOT_MODE = true;
+async function createPilotPumps(){
+  if(!state.isAdmin){err(Error('Réservé à l’administrateur.'));return;}
+  if(!confirm('Créer deux compteurs DE TEST TESTO et VALUE dans Firebase ? Les véritables pompes restent inchangées.'))return;
+  try {
+    await runTransaction(db,async tx=>{
+      const testo=refs('testo'),value=refs('value');
+      const t=await tx.get(testo),v=await tx.get(value);
+      const init=id=>({
+        name:PUMPS[id].name,color:PUMPS[id].color,oilIntervalHours:10,
+        usedSeconds:0,lifetimeSeconds:0,activeSession:null,
+        createdAt:serverTimestamp(),createdBy:state.user.email.toLowerCase()
+      });
+      if(!t.exists())tx.set(testo,init('testo'));
+      if(!v.exists())tx.set(value,init('value'));
+    });
+    message('Pompes de test prêtes. Initialise chaque compteur à 0 h 00 pour commencer.');
+  } catch(e){err(e);}
+}
+document.addEventListener('click',e=>{if(e.target.closest('#createPilotPumps'))createPilotPumps();});
 const authReady=()=>state.user&&state.approved;
-const refs=id=>doc(db,'pumps',id);
+const refs=id=>doc(db,'pilotPumps',id);
 function stopListening(){
   state.unsub.splice(0).forEach(u=>{try{u();}catch(e){}});
   state.pumps={};state.events={testo:[],value:[]};state.archives={testo:[],value:[]};
@@ -99,7 +118,8 @@ function render(){
   const hist=(state.events[id]||[]).slice().sort((a,b)=>ms(b.at)-ms(a.at)).slice(0,45);
   const legacy=(state.archives[id]||[]).slice().sort((a,b)=>a.sourceRow-b.sourceRow);
   const legacyMin=legacy.filter(e=>e.type==='usage').reduce((n,e)=>n+(e.durationMinutes||0),0);
-  $('pumpsContent').innerHTML='<div class="pump-user-line">Connecté : '+esc(state.user.email)+' <button type="button" id="pumpLogout">Déconnexion</button></div>'+
+  $('pumpsContent').innerHTML='<div class="pump-user-line">Connecté : '+esc(state.user.email)+' · ESSAI INDÉPENDANT <button type="button" id="pumpLogout">Déconnexion</button></div>'+
+  (!state.pumps.testo || !state.pumps.value?'<div class="pump-info"><p class="pump-muted">Les compteurs de test sont à créer avant le premier essai.</p>'+(state.isAdmin?'<button type="button" class="pump-action start" id="createPilotPumps">Créer les deux pompes de test</button>':'')+'</div>':'')+
   '<div class="pump-tabs">'+pick('testo')+pick('value')+'</div>'+
   '<section class="pump-counter '+cl+'"><div class="pump-counter-top"><strong>'+p.name+'</strong><span>'+status+'</span></div><div class="pump-time">'+dur(total)+' <small>/ '+(d.oilIntervalHours||10)+' h</small></div><div class="pump-rail"><div style="width:'+Math.min(100,100*total/interval)+'%"></div></div><small>'+(d.lastOilAt?'Dernière vidange réelle : '+dateTime(ms(d.lastOilAt)):'Date de la dernière vidange inconnue. Le zéro est uniquement le départ du suivi.')+'</small></section>'+
   (!initialized?'<div class="pump-info"><p class="pump-muted">Le nouvel historique commence à zéro, sans déclaration de vidange d’huile.</p>'+(state.isAdmin?'<button type="button" id="pumpInit" class="pump-action start">Initialiser le suivi à 0 h 00</button>':'<p class="pump-muted">En attente de l’initialisation par un administrateur.</p>')+'</div>':'')+
@@ -115,7 +135,7 @@ function startListening(){
   stopListening();
   Object.keys(PUMPS).forEach(id=>{
     state.unsub.push(onSnapshot(refs(id),snap=>{if(snap.exists())state.pumps[id]=snap.data();else message('Pompe '+id+' absente de Firebase',true);render();},e=>message('Lecture des pompes impossible : '+e.message,true)));
-    state.unsub.push(onSnapshot(collection(refs(id),'history'),snap=>{
+    state.unsub.push(onSnapshot(collection(doc(db,'pumps',id),'history'),snap=>{
       state.archives[id]=snap.docs.map(d=>d.data()).filter(d=>d.isHistorical===true);
       render();
     },e=>message('Archives inaccessibles : '+e.message,true)));
