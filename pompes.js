@@ -220,12 +220,39 @@ async function oilChange(){
   });
 }
 function report(month){
-  if(!/^\d{4}-\d{2}$/.test(month))return;
-  const all=Object.keys(PUMPS).flatMap(id=>(state.events[id]||[]).filter(e=>ms(e.at)&&date(ms(e.at)).startsWith(month)).map(e=>({...e,pump:id}))).sort((a,b)=>ms(a.at)-ms(b.at));
-  const total=id=>all.filter(e=>e.pump===id&&e.type==='usage').reduce((x,e)=>x+(e.seconds||0),0);
-  printArea.innerHTML='<div class="pump-print"><h1>CHARRIAUT · Entretien des pompes à vide</h1><p>Relevé mensuel '+esc(month)+' · Édité le '+date(Date.now())+'</p><div class="pump-print-summary">TESTO : '+dur(total('testo'))+' · VALUE : '+dur(total('value'))+'</div><table><thead><tr><th>Date</th><th>Pompe</th><th>Salarié</th><th>Opération</th><th>Fluide</th><th>Durée</th><th>Observations</th></tr></thead><tbody>'+
-    (all.length?all.map(e=>'<tr><td>'+esc(dateTime(ms(e.at)))+'</td><td>'+PUMPS[e.pump].name+'</td><td>'+esc(e.person||'')+'</td><td>'+esc(e.type==='oil'?'VIDANGE':e.job||'Utilisation')+'</td><td>'+esc(e.gas||'—')+'</td><td>'+(e.type==='oil'?'—':dur(e.seconds||0))+'</td><td>'+esc(e.note||'')+'</td></tr>').join(''):'<tr><td colspan="7">Aucune intervention pour ce mois.</td></tr>')+
-    '</tbody></table><p class="pump-foot">Relevé des actions enregistrées sur Firebase. Les compteurs tiennent compte des sessions terminées et du temps de la session active.</p></div>';
+  if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(month))return;
+  const archiveForMonth=(r)=>{
+    if(r.date && r.date.slice(0,7)===month)return true;
+    const match=String(r.dateAsWritten||'').match(/^\.\.\/(\d{2})\/(\d{2})$/);
+    return !r.date && !!match && month===('20'+match[2]+'-'+match[1]);
+  };
+  const rows=Object.keys(PUMPS).flatMap(id=>{
+    const current=(state.events[id]||[]).filter(e=>ms(e.at)&&date(ms(e.at)).startsWith(month)).map(e=>({
+      sort:e.at?.toMillis?.()||0,date:dateTime(ms(e.at)),pump:id,
+      person:e.person||e.byName||'',op:e.type==='oil'?'VIDANGE':e.job||'Utilisation',
+      client:'',gas:e.gas||'',seconds:e.type==='oil'?null:e.seconds||0,
+      note:e.note||'',kind:'Nouveau suivi',old:false
+    }));
+    const archive=(state.archives[id]||[]).filter(archiveForMonth).map(e=>({
+      sort:e.date?Date.parse(e.date+'T12:00:00'):Date.parse(month+'-28T12:00:00'),
+      date:e.dateAsWritten||'Date non renseignée',pump:id,
+      person:e.employee||'',op:e.type==='oil'?'VIDANGE':e.operation||'Utilisation',
+      client:e.client||'',gas:e.gasAsWritten||'',seconds:e.type==='oil'?null:(e.durationMinutes||0)*60,
+      note:e.date?'':"Date d'origine incomplète",
+      kind:'Archive 2026',old:true
+    }));
+    return [...current,...archive];
+  }).sort((a,b)=>a.sort-b.sort || a.pump.localeCompare(b.pump));
+  const total=(id,old)=>rows.filter(e=>e.pump===id&&e.old===old&&e.seconds!==null).reduce((sum,e)=>sum+e.seconds,0);
+  const totalText=old=>'TESTO : '+dur(total('testo',old))+' · VALUE : '+dur(total('value',old));
+  const tableRows=rows.map(e=>'<tr><td>'+esc(e.date)+'</td><td>'+esc(PUMPS[e.pump].name)+'</td><td>'+esc(e.person||'—')+'</td><td>'+esc(e.op)+'</td><td>'+esc(e.client||'—')+'</td><td>'+esc(e.gas||'—')+'</td><td>'+(e.seconds===null?'—':dur(e.seconds))+'</td><td>'+esc(e.note||'')+'</td></tr>').join('');
+  printArea.innerHTML='<div class="pump-print"><h1>CHARRIAUT · Entretien des pompes à vide</h1>'+
+    '<p>Relevé mensuel '+esc(month)+' · Édité le '+date(Date.now())+'</p>'+
+    '<div class="pump-print-summary"><strong>Nouveau suivi :</strong> '+totalText(false)+
+    '<p><strong>Ancien historique importé :</strong> '+totalText(true)+'</p></div>'+
+    '<table><thead><tr><th>Date</th><th>Pompe</th><th>Salarié</th><th>Opération</th><th>Client</th><th>Gaz</th><th>Durée</th><th>Observations</th></tr></thead><tbody>'+
+    (rows.length?tableRows:'<tr><td colspan="8">Aucune intervention pour ce mois.</td></tr>')+
+    '</tbody></table><p class="pump-foot">Ancien historique et nouveau suivi présentés séparément. Dates incomplètes conservées telles que saisies. Durée totale fondée sur les sessions terminées, sans compter les sessions actuellement actives. Le champ Salarié reste vide pour les anciennes opérations non attribuées.</p></div>';
   document.body.classList.add('pumps-print');
   window.print();
 }
