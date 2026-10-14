@@ -5,7 +5,7 @@
 <meta name="robots" content="noindex,nofollow">
 <meta name="theme-color" content="#0c477c">
 <title>CHARRIAUT · Aperçu des chronomètres</title>
-<link rel="stylesheet" href="./pompes.css?v=2">
+<link rel="stylesheet" href="./pompes.css?v=3">
 <style>
 :root{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#18354c;background:#eef4f9}body{margin:0;min-height:100vh}
 main{max-width:660px;margin:25px auto;padding:0 15px 50px}
@@ -21,6 +21,18 @@ article p{color:#657b8e;font-size:13px;line-height:1.5}
 button.pump-entry{cursor:pointer}
 footer{margin-top:24px;color:#647c90;font-size:12px;text-align:center}
 a{color:#175f96}
+@media print {
+ @page {size:A4 landscape; margin:10mm}
+ html,body {background:#fff!important; width:auto!important;min-height:0!important;height:auto!important;margin:0!important;padding:0!important}
+ body.pumps-print > *:not(#pumpsPrintSheet){display:none!important}
+ body.pumps-print #pumpsPrintSheet {display:block!important;position:static!important;width:100%!important;max-width:none!important;margin:0!important;padding:0!important;color:#111!important;background:#fff!important}
+ body.pumps-print #pumpsPrintSheet .pump-print {font-family:Arial,sans-serif!important;font-size:8.5pt!important}
+ body.pumps-print #pumpsPrintSheet h1{font-size:17pt!important}
+ body.pumps-print #pumpsPrintSheet table{width:100%!important;border-collapse:collapse!important;table-layout:fixed!important}
+ body.pumps-print #pumpsPrintSheet th,body.pumps-print #pumpsPrintSheet td{border:1px solid #a2a2a2!important;padding:5px!important;overflow-wrap:anywhere!important}
+ body.pumps-print #pumpsPrintSheet tr{break-inside:avoid!important;page-break-inside:avoid!important}
+ body.pumps-print #pumpsPrintSheet thead{display:table-header-group!important}
+}
 .pump-action:disabled,.pump-oil:disabled{opacity:.5;cursor:not-allowed}
 </style>
 </head>
@@ -35,5 +47,5 @@ a{color:#175f96}
 <span aria-hidden="true">›</span></button></article>
 <footer><a href="../test-pompes/">Consulter l’historique vérifié</a> · <a href="../">Retour à la V14 actuelle</a></footer>
 </main>
-<script type="module" src="./pompes.js?v=2"></script>
+<script type="module" src="./pompes.js?v=3"></script>
 </body></html>
