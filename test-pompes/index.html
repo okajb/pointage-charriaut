@@ -22,6 +22,15 @@ aside{font-size:12px;color:#617689;margin-top:12px;line-height:1.4}
 .status{font-weight:700}.status.error{color:#a73527}.status.ok{color:#15734d}
 .logout{background:#eaf2fa;color:#20517b}
 #app[hidden],#login[hidden],#ready[hidden]{display:none!important}
+.legacy-tabs{display:flex;gap:9px;margin:10px 0}
+.legacy-chip{flex:1;border:1px solid #c7dcea;border-radius:11px;padding:12px;background:#f1f7fc}
+.legacy-chip b{display:block;font-size:22px}
+.legacy-chip small{font-size:11px;color:#526e85}
+.legacy-row{border-top:1px solid #e1ebf2;padding:11px 0;display:flex;justify-content:space-between;gap:12px;font-size:13px}
+.legacy-row>div:first-child{min-width:0}.legacy-row strong{display:block;word-break:break-word}
+.legacy-row small{display:block;color:#657f95;font-size:11px;line-height:1.5;margin-top:3px}
+.legacy-row em{font-size:12px;white-space:nowrap;font-style:normal;font-weight:800}
+.legacy-month{background:#f2f6f9;color:#466783;padding:8px 10px;border-radius:8px;font-size:12px;margin:18px 0 4px;font-weight:750}
 footer{font-size:12px;text-align:center;color:#698096;margin:20px 0}
 a{color:#0b5797}
 </style>
@@ -43,6 +52,14 @@ a{color:#0b5797}
 <div class="pump orange"><div><b>TESTO</b><small id="testo-info">Lecture en cours…</small></div><span class="mark">🛠️</span></div>
 <div class="pump blue"><div><b>VALUE</b><small id="value-info">Lecture en cours…</small></div><span class="mark">🛠️</span></div>
 <aside>Pour chaque pompe, les 10 h affichées désignent la fréquence de vidange. Si aucune vidange initiale n'est saisie, nous n'affichons pas de compteur de temps fictif.</aside>
+<h2 style="margin-top:26px">Historique 2026 importé</h2>
+<p class="muted">Archive de l’ancien tableau « Temps pompe vide » : elle est séparée des compteurs à partir de 2026. Aucune modification possible ici.</p>
+<div class="legacy-tabs">
+<div class="legacy-chip"><span>TESTO</span><b id="legacyTesto">…</b><small>Durée historique cumulée</small></div>
+<div class="legacy-chip"><span>VALUE</span><b id="legacyValue">…</b><small>Durée historique cumulée</small></div>
+</div>
+<p id="legacyStatus" class="muted" role="status">Chargement des archives depuis Firebase…</p>
+<div id="legacyList"></div>
 </section>
 <section><h2>État de la connexion</h2><p id="status" class="status" role="status" aria-live="polite">Initialisation de Firebase…</p></section>
 <footer>Essai technique uniquement · <a href="../">Retour à l'application Charriaut existante</a></footer>
@@ -50,7 +67,7 @@ a{color:#0b5797}
 <script type="module">
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js';
 import {getAuth,onAuthStateChanged,isSignInWithEmailLink,signInWithEmailLink,sendSignInLinkToEmail,signOut} from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js';
-import {getFirestore,doc,getDoc,onSnapshot} from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
+import {getFirestore,doc,getDoc,onSnapshot,collection} from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
 const config={
   apiKey:"AIzaSyAtm8CARaeWyh_ncvjcxATTOJQS3ppyZNc",
   authDomain:"charriaut-entretien.firebaseapp.com",
@@ -62,6 +79,23 @@ const config={
 const app=initializeApp(config),auth=getAuth(app),db=getFirestore(app);
 const $=id=>document.getElementById(id);
 let removeListeners=[];
+const archive={testo:[],value:[]};
+const safe=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function renderArchive(){
+ const all=[...archive.testo,...archive.value];
+ const sums=id=>archive[id].filter(x=>x.type==='usage').reduce((s,x)=>s+(Number(x.durationMinutes)||0),0);
+ const duration=m=>Math.floor(m/60)+' h '+String(m%60).padStart(2,'0');
+ $('legacyTesto').textContent=duration(sums('testo'));
+ $('legacyValue').textContent=duration(sums('value'));
+ $('legacyStatus').textContent=all.length+' opération'+(all.length===1?'':'s')+' archivées dans Firebase ('+all.filter(x=>x.type==='usage').length+' utilisations, '+all.filter(x=>x.type==='oil').length+' vidanges).';
+ all.sort((a,b)=>(a.sourceRow-b.sourceRow)||(a.pumpId.localeCompare(b.pumpId)));
+ $('legacyList').innerHTML=all.map(x=>{
+ const title=x.type==='oil'?'Vidange':x.operation||'Utilisation';
+ const when=x.dateAsWritten||'Date non renseignée';
+ const note=[x.client?'Client : '+x.client:'',x.gasAsWritten?'Gaz : '+x.gasAsWritten:''].filter(Boolean).join(' · ');
+ return '<div class="legacy-row"><div><strong>'+safe(x.pumpId==='testo'?'🟠 TESTO — ':'🔵 VALUE — ')+safe(title)+'</strong><small>'+safe(when)+(note?' · '+safe(note):'')+'</small></div><em>'+(x.type==='usage'?duration(x.durationMinutes||0):'✓')+'</em></div>';
+ }).join('') || '<p class="muted">Aucune archive trouvée.</p>';
+}
 const setStatus=(text,bad=false)=>{$('status').textContent=text;$('status').className='status '+(bad?'error':'ok');};
 const stop=()=>{removeListeners.forEach(un=>un());removeListeners=[];};
 const msg=e=>String(e?.message||e||'Erreur inconnue');
@@ -92,6 +126,7 @@ async function load(){
 }
 onAuthStateChanged(auth,async user=>{
  stop();
+ archive.testo=[];archive.value=[];
  $('ready').hidden=true;$('login').hidden=false;
  if(!user){setStatus('Non connecté — demande un lien ci-dessus.');return;}
  try {
@@ -103,6 +138,10 @@ onAuthStateChanged(auth,async user=>{
   $('login').hidden=true;$('ready').hidden=false;
   setStatus('Compte reconnu. Lecture des deux pompes en temps réel…');
   for(const id of ['testo','value']){
+   removeListeners.push(onSnapshot(collection(db,'pumps',id,'history'),snapshot=>{
+     archive[id]=snapshot.docs.map(d=>d.data().isHistorical?{...d.data(),pumpId:id}:null).filter(Boolean);
+     renderArchive();
+   },e=>{ $('legacyStatus').textContent='Impossible de lire les archives : '+msg(e); }));
    removeListeners.push(onSnapshot(doc(db,'pumps',id),snapshot=>{
     const target=$(id+'-info');
     if(!snapshot.exists()){target.textContent='Fiche absente';setStatus('Pompe '+id+' introuvable.',true);return;}
