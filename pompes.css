@@ -22,3 +22,9 @@
 body.pumps-print #pumpsPrintSheet{display:block!important;position:static;background:white;color:#111}
 body.pumps-print .pump-print{font-family:Arial,sans-serif;font-size:9pt}.pump-print h1{font-size:18pt;margin:0 0 7px}.pump-print-summary{padding:9px;background:#eef4f8;margin:10px 0}.pump-print table{width:100%;border-collapse:collapse;table-layout:fixed}.pump-print th,.pump-print td{border:1px solid #9aa9b7;text-align:left;padding:7px 5px;overflow-wrap:anywhere}.pump-print th{background:#e7eef5}.pump-print td:last-child{width:26%}.pump-foot{font-size:8pt;color:#555;margin-top:15px}
 @page{size:A4 landscape;margin:12mm}}
+.pump-login-label{display:flex;flex-direction:column;gap:7px;font-size:13px;font-weight:800}
+.pump-login-label input{font-size:16px;padding:12px;border:1px solid #cbdde9;border-radius:9px;max-width:100%}
+.pump-message{margin:8px 0;padding:10px 12px;border:1px solid #aad7e8;color:#155577;background:#edf9ff;border-radius:10px;font-size:12px;line-height:1.35}
+.pump-message.error{color:#8d3327;border-color:#fac1b8;background:#fff2ef}
+.pump-user-line{display:flex;align-items:center;justify-content:space-between;gap:7px;font-size:11px;color:#5e7689;overflow-wrap:anywhere;margin-bottom:9px}
+.pump-user-line button{border:1px solid #d2e0e9;background:white;padding:7px;border-radius:8px;font-size:11px;color:#19507e}
