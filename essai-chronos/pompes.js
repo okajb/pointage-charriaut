@@ -31,6 +31,8 @@ const date=t=>{
 };
 const dateTime=t=>new Date(t).toLocaleString('fr-FR',{dateStyle:'short',timeStyle:'short'});
 const dur=s=>Math.floor(Math.max(0,s)/3600)+' h '+pad(Math.floor(Math.max(0,s)%3600/60))+' min';
+const secPart=s=>pad(Math.floor(Math.max(0,s)%60))+' s';
+const durPrecise=s=>dur(s)+' '+secPart(s);
 const ms=ts=>ts?.toMillis?.()??0;
 const PUMPS={testo:{name:'TESTO',color:'orange'},value:{name:'VALUE',color:'blue'}};
 const state={selected:'testo',user:null,approved:false,isAdmin:false,pumps:{},events:{testo:[],value:[]},archives:{testo:[],value:[]},unsub:[],busy:false};
@@ -93,6 +95,34 @@ function liveSeconds(id){
   const live=x?Math.max(0,Math.floor((Date.now()-ms(x))/1000)):0;
   return {seconds:Math.max(0,d.usedSeconds||0)+live,active:live};
 }
+// Affichage local uniquement : la durée officielle est écrite dans Firebase à la FIN.
+function tickLive(){
+  if(!modal.open||!authReady())return;
+  const id=state.selected;
+  const d=state.pumps[id];
+  if(!d)return;
+  const active=liveSeconds(id);
+  const total=active.seconds;
+  const setText=(name,value)=>{const el=$(name);if(el && el.textContent!==value)el.textContent=value;};
+  setText('pumpElapsedTotal',dur(total));
+  setText('pumpElapsedSeconds',secPart(total));
+  if(d.activeSession)setText('pumpLiveSession',durPrecise(active.active));
+  for(const otherId of ['testo','value']){
+    setText('pumpTab-'+otherId,dur(liveSeconds(otherId).seconds)+' / 10 h');
+  }
+  const el=$('pumpProgress');
+  const interval=(d.oilIntervalHours||10)*3600;
+  if(el)el.style.width=Math.min(100,100*total/interval)+'%';
+  const initialized=Number.isFinite(d.usedSeconds)&&!!d.trackingStartedAt;
+  const status=!initialized?'SUIVI À INITIALISER':total>=interval?'10 H — VIDANGE À EFFECTUER':total>=interval*.8?'VIDANGE À PRÉVOIR':!d.lastOilAt?'HUILE À CONTRÔLER':'En service';
+  setText('pumpStatus',status);
+  const counter=$('pumpCounter');
+  if(counter){
+    counter.classList.toggle('overdue',total>=interval);
+    counter.classList.toggle('soon',total<interval&&(!initialized||total>=interval*.8||!d.lastOilAt));
+    counter.classList.toggle('ok',initialized&&total<interval*.8&&!!d.lastOilAt);
+  }
+}
 function render(){
   if(!modal.open)return;
   if(!authReady()){
@@ -113,7 +143,7 @@ function render(){
   const pick=pumpId=>{
     const n=PUMPS[pumpId],v=state.pumps[pumpId];
     const sec=liveSeconds(pumpId).seconds;
-    return '<button class="pump-tab '+n.color+' '+(pumpId===id?'selected':'')+'" data-pump="'+pumpId+'" type="button"><strong>'+n.name+'</strong><small>'+(v?dur(sec)+' / 10 h':'Chargement…')+'</small></button>';
+    return '<button class="pump-tab '+n.color+' '+(pumpId===id?'selected':'')+'" data-pump="'+pumpId+'" type="button"><strong>'+n.name+'</strong><small id="pumpTab-'+pumpId+'">'+(v?dur(sec)+' / 10 h':'Chargement…')+'</small></button>';
   };
   const hist=(state.events[id]||[]).slice().sort((a,b)=>ms(b.at)-ms(a.at)).slice(0,45);
   const legacy=(state.archives[id]||[]).slice().sort((a,b)=>a.sourceRow-b.sourceRow);
@@ -121,15 +151,16 @@ function render(){
   $('pumpsContent').innerHTML='<div class="pump-user-line">Connecté : '+esc(state.user.email)+' · ESSAI INDÉPENDANT <button type="button" id="pumpLogout">Déconnexion</button></div>'+
   (!state.pumps.testo || !state.pumps.value?'<div class="pump-info"><p class="pump-muted">Les compteurs de test sont à créer avant le premier essai.</p>'+(state.isAdmin?'<button type="button" class="pump-action start" id="createPilotPumps">Créer les deux pompes de test</button>':'')+'</div>':'')+
   '<div class="pump-tabs">'+pick('testo')+pick('value')+'</div>'+
-  '<section class="pump-counter '+cl+'"><div class="pump-counter-top"><strong>'+p.name+'</strong><span>'+status+'</span></div><div class="pump-time">'+dur(total)+' <small>/ '+(d.oilIntervalHours||10)+' h</small></div><div class="pump-rail"><div style="width:'+Math.min(100,100*total/interval)+'%"></div></div><small>'+(d.lastOilAt?'Dernière vidange réelle : '+dateTime(ms(d.lastOilAt)):'Date de la dernière vidange inconnue. Le zéro est uniquement le départ du suivi.')+'</small></section>'+
+  '<section class="pump-counter '+cl+'" id="pumpCounter"><div class="pump-counter-top"><strong>'+p.name+'</strong><span id="pumpStatus">'+status+'</span></div><div class="pump-time"><span id="pumpElapsedTotal">'+dur(total)+'</span> <span class="pump-seconds" id="pumpElapsedSeconds">'+secPart(total)+'</span> <small>/ '+(d.oilIntervalHours||10)+' h</small></div><div class="pump-rail"><div id="pumpProgress" style="width:'+Math.min(100,100*total/interval)+'%"></div></div><small>'+(d.lastOilAt?'Dernière vidange réelle : '+dateTime(ms(d.lastOilAt)):'Date de la dernière vidange inconnue. Le zéro est uniquement le départ du suivi.')+'</small></section>'+
   (!initialized?'<div class="pump-info"><p class="pump-muted">Le nouvel historique commence à zéro, sans déclaration de vidange d’huile.</p>'+(state.isAdmin?'<button type="button" id="pumpInit" class="pump-action start">Initialiser le suivi à 0 h 00</button>':'<p class="pump-muted">En attente de l’initialisation par un administrateur.</p>')+'</div>':'')+
-  (run?'<div class="pump-info"><p class="pump-active">⏱ En cours depuis '+(ms(run.startedAt)?dateTime(ms(run.startedAt)):'quelques instants')+' · '+esc(run.byName)+'</p><p class="pump-muted">Fluide : '+esc(run.gas)+' · '+esc(run.job)+'</p><button type="button" class="pump-action finish" id="pumpStop">■ FIN D’UTILISATION</button></div>':
+  (run?'<div class="pump-info"><p class="pump-active">⏱ En cours depuis '+(ms(run.startedAt)?dateTime(ms(run.startedAt)):'quelques instants')+' · '+esc(run.byName)+'</p><p class="pump-session-time">Temps de cette utilisation : <strong id="pumpLiveSession">'+durPrecise(liveSeconds(id).active)+'</strong></p><p class="pump-muted">Fluide : '+esc(run.gas)+' · '+esc(run.job)+'</p><button type="button" class="pump-action finish" id="pumpStop">■ FIN D’UTILISATION</button></div>':
   '<form class="pump-info" id="pumpStartForm"><div class="pump-fields"><label>Nature du fluide / gaz<select name="gas" required><option>R32</option><option>R410A</option><option>AZOTE</option><option>AZOTE HYDROGÉNÉ</option><option value="AUTRE">Autre</option></select></label><label>Si autre : préciser<input name="other" maxlength="80" placeholder="Gaz utilisé"></label><label>Opération<select name="job"><option>Tirage au vide</option><option>Contrôle</option><option>Entretien</option><option>Autre intervention</option></select></label><label>Observation<textarea name="note" maxlength="600" rows="2" placeholder="Chantier, remarque..."></textarea></label></div><button type="submit" class="pump-action start" '+(initialized?'':'disabled title="Effectuer et enregistrer la vidange initiale"')+'>▶ DÉPART</button>'+(initialized?'':'<p class="pump-muted">L’administrateur doit initialiser le nouveau suivi avant le démarrage.</p>')+'</form>')+
   '<div class="pump-info"><button class="pump-oil" id="pumpOil" '+(run||!initialized?'disabled':'')+' type="button">✓ Vidange effectuée — remettre le compteur à zéro</button><p class="pump-muted">Chaque utilisation et vidange est enregistrée dans l’historique partagé, avec le compte du salarié.</p></div>'+
   '<section class="pump-history"><div class="pump-history-head"><h3>Historique '+p.name+'</h3><span>'+hist.length+' opérations affichées</span></div>'+
   (hist.length?'<div class="pump-events">'+hist.map(e=>'<div class="pump-event"><span><strong>'+(e.type==='oil'?'🛢 Vidange':esc(e.job||'Utilisation'))+'</strong><small>'+esc(ms(e.at)?dateTime(ms(e.at)):'Date en cours de sauvegarde')+' · '+esc(e.person||e.byName||e.byEmail||'')+'</small>'+(e.gas?'<small>Fluide : '+esc(e.gas)+'</small>':'')+(e.note?'<small>'+esc(e.note)+'</small>':'')+'</span><b>'+(e.type==='oil'?'✓':dur(e.seconds||0))+'</b></div>').join('')+'</div>':'<p class="pump-muted">Aucune opération enregistrée.</p>')+'</section>'+
   '<section class="pump-history pump-legacy"><div class="pump-history-head"><h3>Archives 2026 · '+p.name+'</h3><span>'+dur(legacyMin*60)+' cumulées</span></div><p class="pump-muted">'+legacy.length+' anciennes opérations enregistrées séparément du compteur actuel.</p><div class="pump-events">'+legacy.map(e=>'<div class="pump-event"><span><strong>'+(e.type==='oil'?'🛢 Vidange':esc(e.operation||'Utilisation'))+'</strong><small>'+esc(e.dateAsWritten||'Date inconnue')+(e.client?' · Client : '+esc(e.client):'')+(e.gasAsWritten?' · Gaz : '+esc(e.gasAsWritten):'')+'</small></span><b>'+(e.type==='oil'?'✓':dur((e.durationMinutes||0)*60))+'</b></div>').join('')+'</div></section>'+
   '<div class="pump-report"><label>Mois du relevé <input id="pumpsMonth" type="month" value="'+date(Date.now()).slice(0,7)+'"></label><button type="button" id="pumpPDF">Imprimer / PDF mensuel (2 pompes)</button></div>';
+  tickLive();
 }
 function startListening(){
   stopListening();
@@ -335,6 +366,7 @@ onAuthStateChanged(auth,async user=>{
     history.replaceState(null,'',window.location.origin+window.location.pathname);
   }catch(e){message('Lien de connexion impossible : '+e.message,true);}
 })();
-window.setInterval(()=>{if(modal.open&&authReady()&&state.pumps[state.selected]?.activeSession)render();},30000);
+window.setInterval(tickLive,1000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)tickLive();});
 window.addEventListener('afterprint',()=>document.body.classList.remove('pumps-print'));
 window.addEventListener('beforeprint',()=>{if(!document.body.classList.contains('pumps-print'))printArea.innerHTML='';});
