@@ -105,7 +105,7 @@ service cloud.firestore {
       }
       allow get: if pumpId in ['testo','value'] && isEmployee();
       allow list, create, delete: if false;
-      allow update: if pumpId in ['testo','value'] && isEmployee()
+      allow update: if pumpId in ['testo','value'] && isAdmin()
         && (goodInit() || goodStart() || goodStop() || goodOil());
       match /history/{recordId} {
         allow read: if isEmployee() && pumpId in ['testo', 'value'];
@@ -184,7 +184,7 @@ service cloud.firestore {
                 && e.previousSeconds is int && e.previousSeconds >= 0));
         }
         allow read: if pumpId in ['testo','value'] && isEmployee();
-        allow create: if pumpId in ['testo','value'] && isEmployee() && validEvent() && linkedToPump();
+        allow create: if pumpId in ['testo','value'] && isAdmin() && validEvent() && linkedToPump();
         allow update, delete: if false;
       }
     }
