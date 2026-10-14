@@ -64,11 +64,7 @@
         <button type="button" id="shortcutHistory" class="quick-tile"><span class="quick-symbol history">◴</span><span>Historique</span></button>
         <button type="button" id="shortcutLeave" class="quick-tile"><span class="quick-symbol holiday">▦</span><span>Congés / RTT</span></button>
       </nav>
-      <button type="button" id="pumpsOpen" class="pump-entry" aria-label="Ouvrir l'entretien des pompes à vide, version test">
-        <span class="pump-entry-icon" aria-hidden="true">🛠</span>
-        <span class="pump-entry-text"><strong>ENTRETIEN DES POMPES À VIDE <span style="color:#b06115">(TEST)</span></strong><small>🟠 TESTO · 🔵 VALUE · Chronomètres · Vidanges · PDF mensuel</small></span>
-        <span aria-hidden="true" style="font-size:22px">›</span>
-      </button>
+
       <div class="mini-mail-note" role="note">ⓘ &nbsp; Rappel fin de mois : envoi à <strong>contact@charriaut.fr</strong></div>
       <div class="day-totals" id="dayTotals"></div>
       <details class="pointing-details"><summary>✎ Corriger une heure ou consulter les modifications</summary>
@@ -159,6 +155,14 @@
       <details><summary>Conserver ses heures sans les perdre</summary><p>Touche « Sauvegarder mes pointages », garde le fichier JSON dans Fichiers / Drive et refais cette sauvegarde régulièrement. En cas de changement de téléphone, restaure-le depuis les réglages.</p></details>
     </section>
     <p class="privacy-note">🔒 Pas de transmission automatique au bureau. Les heures sont stockées sur cet appareil et recopiées dans une seconde mémoire locale quand elle est disponible. Ces copies ne protègent pas contre la perte du téléphone ou la suppression des données de l’application : exporte régulièrement une sauvegarde dans Fichiers ou Drive. N’utilise pas le mode privé. L’envoi du PDF se fait par mail par chaque salarié.</p>
+    <section class="section-card" aria-label="Entretien des pompes à vide" style="margin-top:16px;padding:14px 16px 18px">
+      <div class="section-heading"><div><div class="eyebrow aqua">ESPACE MATÉRIEL · TEST</div><h2>Suivi des pompes à vide</h2></div></div>
+      <button type="button" id="pumpsOpen" class="pump-entry" aria-label="Ouvrir l'entretien des pompes à vide, version test">
+        <span class="pump-entry-icon" aria-hidden="true">🛠</span>
+        <span class="pump-entry-text"><strong>ENTRETIEN DES POMPES À VIDE <span style="color:#b06115">(TEST)</span></strong><small>🟠 TESTO · 🔵 VALUE · Chronomètres · Vidanges · PDF mensuel</small></span>
+        <span aria-hidden="true" style="font-size:22px">›</span>
+      </button>
+    </section>
   </main>
   <nav class="bottom-nav" aria-label="Navigation rapide"><button type="button" id="navHome">⌂<span>Accueil</span></button><button type="button" id="navHistory">☷<span>Historique</span></button><button type="button" id="navDocs">▤<span>Documents</span></button></nav>
 </div>
