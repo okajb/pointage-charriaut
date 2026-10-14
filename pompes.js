@@ -19,7 +19,7 @@ const cfg={
   messagingSenderId:"878437191970",
   appId:"1:878437191970:web:f2a2ac7319d48b9113957b"
 };
-const app=initializeApp(cfg,"charriaut-pompes");
+const app=initializeApp(cfg); // Auth partagée avec les pages de test sur ce domaine
 const auth=getAuth(app);
 const db=getFirestore(app);
 const $=id=>document.getElementById(id);
@@ -33,7 +33,7 @@ const dateTime=t=>new Date(t).toLocaleString('fr-FR',{dateStyle:'short',timeStyl
 const dur=s=>Math.floor(Math.max(0,s)/3600)+' h '+pad(Math.floor(Math.max(0,s)%3600/60))+' min';
 const ms=ts=>ts?.toMillis?.()??0;
 const PUMPS={testo:{name:'TESTO',color:'orange'},value:{name:'VALUE',color:'blue'}};
-const state={selected:'testo',user:null,approved:false,pumps:{},events:{testo:[],value:[]},unsub:[],busy:false};
+const state={selected:'testo',user:null,approved:false,pumps:{},events:{testo:[],value:[]},archives:{testo:[],value:[]},unsub:[],busy:false};
 const modal=document.createElement('dialog');
 modal.id='pumpsDialog';
 modal.className='pump-dialog';
@@ -55,7 +55,7 @@ const authReady=()=>state.user&&state.approved;
 const refs=id=>doc(db,'pumps',id);
 function stopListening(){
   state.unsub.splice(0).forEach(u=>{try{u();}catch(e){}});
-  state.pumps={};state.events={testo:[],value:[]};
+  state.pumps={};state.events={testo:[],value:[]};state.archives={testo:[],value:[]};
 }
 const readyName=()=>{
   const p=userProfile();
@@ -82,28 +82,36 @@ function render(){
   const id=state.selected,p=PUMPS[id],d=state.pumps[id]||{},run=d.activeSession;
   const total=liveSeconds(id).seconds;
   const interval=(d.oilIntervalHours||10)*3600;
-  const status=total>=interval?'VIDANGE À EFFECTUER':total>=interval*.8?'VIDANGE À PRÉVOIR':'En service';
-  const cl=total>=interval?'overdue':total>=interval*.8?'soon':'ok';
+  const initialized=Number.isFinite(d.usedSeconds) && !!d.lastOilAt;
+  const status=!initialized?'VIDANGE INITIALE À CONFIRMER':total>=interval?'VIDANGE À EFFECTUER':total>=interval*.8?'VIDANGE À PRÉVOIR':'En service';
+  const cl=!initialized?'soon':total>=interval?'overdue':total>=interval*.8?'soon':'ok';
   const pick=pumpId=>{
     const n=PUMPS[pumpId],v=state.pumps[pumpId];
     const sec=liveSeconds(pumpId).seconds;
     return '<button class="pump-tab '+n.color+' '+(pumpId===id?'selected':'')+'" data-pump="'+pumpId+'" type="button"><strong>'+n.name+'</strong><small>'+(v?dur(sec)+' / 10 h':'Chargement…')+'</small></button>';
   };
   const hist=(state.events[id]||[]).slice().sort((a,b)=>ms(b.at)-ms(a.at)).slice(0,45);
+  const legacy=(state.archives[id]||[]).slice().sort((a,b)=>a.sourceRow-b.sourceRow);
+  const legacyMin=legacy.filter(e=>e.type==='usage').reduce((n,e)=>n+(e.durationMinutes||0),0);
   $('pumpsContent').innerHTML='<div class="pump-user-line">Connecté : '+esc(state.user.email)+' <button type="button" id="pumpLogout">Déconnexion</button></div>'+
   '<div class="pump-tabs">'+pick('testo')+pick('value')+'</div>'+
   '<section class="pump-counter '+cl+'"><div class="pump-counter-top"><strong>'+p.name+'</strong><span>'+status+'</span></div><div class="pump-time">'+dur(total)+' <small>/ '+(d.oilIntervalHours||10)+' h</small></div><div class="pump-rail"><div style="width:'+Math.min(100,100*total/interval)+'%"></div></div><small>'+(d.lastOilAt?'Dernière vidange : '+dateTime(ms(d.lastOilAt)):'Dernière vidange non renseignée — état de l’huile à confirmer')+'</small></section>'+
   (run?'<div class="pump-info"><p class="pump-active">⏱ En cours depuis '+(ms(run.startedAt)?dateTime(ms(run.startedAt)):'quelques instants')+' · '+esc(run.byName)+'</p><p class="pump-muted">Fluide : '+esc(run.gas)+' · '+esc(run.job)+'</p><button type="button" class="pump-action finish" id="pumpStop">■ FIN D’UTILISATION</button></div>':
-  '<form class="pump-info" id="pumpStartForm"><div class="pump-fields"><label>Nature du fluide / gaz<select name="gas" required><option>R32</option><option>R410A</option><option>AZOTE</option><option>AZOTE HYDROGÉNÉ</option><option value="AUTRE">Autre</option></select></label><label>Si autre : préciser<input name="other" maxlength="80" placeholder="Gaz utilisé"></label><label>Opération<select name="job"><option>Tirage au vide</option><option>Contrôle</option><option>Entretien</option><option>Autre intervention</option></select></label><label>Observation<textarea name="note" maxlength="600" rows="2" placeholder="Chantier, remarque..."></textarea></label></div><button type="submit" class="pump-action start">▶ DÉPART</button></form>')+
+  '<form class="pump-info" id="pumpStartForm"><div class="pump-fields"><label>Nature du fluide / gaz<select name="gas" required><option>R32</option><option>R410A</option><option>AZOTE</option><option>AZOTE HYDROGÉNÉ</option><option value="AUTRE">Autre</option></select></label><label>Si autre : préciser<input name="other" maxlength="80" placeholder="Gaz utilisé"></label><label>Opération<select name="job"><option>Tirage au vide</option><option>Contrôle</option><option>Entretien</option><option>Autre intervention</option></select></label><label>Observation<textarea name="note" maxlength="600" rows="2" placeholder="Chantier, remarque..."></textarea></label></div><button type="submit" class="pump-action start" '+(initialized?'':'disabled title="Effectuer et enregistrer la vidange initiale"')+'>▶ DÉPART</button>'+(initialized?'':'<p class="pump-muted">La première vidange doit être réellement effectuée et enregistrée avant le démarrage.</p>')+'</form>')+
   '<div class="pump-info"><button class="pump-oil" id="pumpOil" '+(run?'disabled':'')+' type="button">✓ Vidange effectuée — remettre le compteur à zéro</button><p class="pump-muted">Chaque utilisation et vidange est enregistrée dans l’historique partagé, avec le compte du salarié.</p></div>'+
   '<section class="pump-history"><div class="pump-history-head"><h3>Historique '+p.name+'</h3><span>'+hist.length+' opérations affichées</span></div>'+
   (hist.length?'<div class="pump-events">'+hist.map(e=>'<div class="pump-event"><span><strong>'+(e.type==='oil'?'🛢 Vidange':esc(e.job||'Utilisation'))+'</strong><small>'+esc(ms(e.at)?dateTime(ms(e.at)):'Date en cours de sauvegarde')+' · '+esc(e.person||e.byName||e.byEmail||'')+'</small>'+(e.gas?'<small>Fluide : '+esc(e.gas)+'</small>':'')+(e.note?'<small>'+esc(e.note)+'</small>':'')+'</span><b>'+(e.type==='oil'?'✓':dur(e.seconds||0))+'</b></div>').join('')+'</div>':'<p class="pump-muted">Aucune opération enregistrée.</p>')+'</section>'+
+  '<section class="pump-history pump-legacy"><div class="pump-history-head"><h3>Archives 2026 · '+p.name+'</h3><span>'+dur(legacyMin*60)+' cumulées</span></div><p class="pump-muted">'+legacy.length+' anciennes opérations enregistrées séparément du compteur actuel.</p><div class="pump-events">'+legacy.map(e=>'<div class="pump-event"><span><strong>'+(e.type==='oil'?'🛢 Vidange':esc(e.operation||'Utilisation'))+'</strong><small>'+esc(e.dateAsWritten||'Date inconnue')+(e.client?' · Client : '+esc(e.client):'')+(e.gasAsWritten?' · Gaz : '+esc(e.gasAsWritten):'')+'</small></span><b>'+(e.type==='oil'?'✓':dur((e.durationMinutes||0)*60))+'</b></div>').join('')+'</div></section>'+
   '<div class="pump-report"><label>Mois du relevé <input id="pumpsMonth" type="month" value="'+date(Date.now()).slice(0,7)+'"></label><button type="button" id="pumpPDF">Imprimer / PDF mensuel (2 pompes)</button></div>';
 }
 function startListening(){
   stopListening();
   Object.keys(PUMPS).forEach(id=>{
     state.unsub.push(onSnapshot(refs(id),snap=>{if(snap.exists())state.pumps[id]=snap.data();else message('Pompe '+id+' absente de Firebase',true);render();},e=>message('Lecture des pompes impossible : '+e.message,true)));
+    state.unsub.push(onSnapshot(collection(refs(id),'history'),snap=>{
+      state.archives[id]=snap.docs.map(d=>d.data()).filter(d=>d.isHistorical===true);
+      render();
+    },e=>message('Archives inaccessibles : '+e.message,true)));
     state.unsub.push(onSnapshot(collection(refs(id),'events'),snap=>{
       state.events[id]=snap.docs.map(d=>({id:d.id,...d.data()}));
       render();
@@ -138,6 +146,7 @@ async function startSession(fd){
       const snap=await tx.get(pump);
       if(!snap.exists())throw Error('Pompe absente de la base.');
       if(snap.data().activeSession)throw Error('Cette pompe est déjà en cours d’utilisation.');
+      if(!snap.data().lastOilAt || typeof snap.data().usedSeconds!=='number')throw Error('Il faut effectuer et enregistrer la vidange initiale avant de démarrer.');
       tx.update(pump,{
         activeSession:{byUid:state.user.uid,byEmail:state.user.email.toLowerCase(),byName:name,gas,job,note,startedAt:serverTimestamp()},
         lastActionAt:serverTimestamp()
