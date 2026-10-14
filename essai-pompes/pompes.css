@@ -28,3 +28,5 @@ body.pumps-print .pump-print{font-family:Arial,sans-serif;font-size:9pt}.pump-pr
 .pump-message.error{color:#8d3327;border-color:#fac1b8;background:#fff2ef}
 .pump-user-line{display:flex;align-items:center;justify-content:space-between;gap:7px;font-size:11px;color:#5e7689;overflow-wrap:anywhere;margin-bottom:9px}
 .pump-user-line button{border:1px solid #d2e0e9;background:white;padding:7px;border-radius:8px;font-size:11px;color:#19507e}
+
+@media print{body.pumps-print > main{display:none!important}body.pumps-print > #pumpsPrintSheet{display:block!important}}
