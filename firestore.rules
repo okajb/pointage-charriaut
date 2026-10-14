@@ -18,7 +18,7 @@ service cloud.firestore {
       }
       function goodStart() {
         let original = resource.data.get('activeSession', null);
-        let next = request.resource.data.activeSession;
+        let next = request.resource.data.get('activeSession',null);
         return original == null
           && next is map
           && next.keys().hasOnly(['byUid','byEmail','byName','gas','job','note','startedAt'])
