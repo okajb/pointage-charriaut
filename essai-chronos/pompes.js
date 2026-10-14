@@ -302,7 +302,7 @@ $('pumpsContent').addEventListener('submit',async event=>{
     const email=String($('pumpLoginEmail').value||'').trim().toLowerCase();
     if(!email||!email.includes('@'))return;
     try{
-      await sendSignInLinkToEmail(auth,email,{url:'https://okajb.github.io/pointage-charriaut/',handleCodeInApp:true});
+      await sendSignInLinkToEmail(auth,email,{url:'https://okajb.github.io/pointage-charriaut/essai-chronos/',handleCodeInApp:true});
       localStorage.setItem('charriaut.pompes.loginEmail',email);
       message('Lien envoyé. Ouvre-le depuis ton téléphone. Il peut être nécessaire de revenir au navigateur.');
     }catch(e){err(e);}
