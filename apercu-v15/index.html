@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0C477C">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Charriaut Heures">
+<meta name="description" content="Application de pointage de l’équipe CHARRIAUT : heures, lieux de chantier, historique et relevé PDF mensuel.">
+<!-- Aperçu : pas de manifeste PWA afin de ne pas se substituer à la V14 installée. -->
+<link rel="icon" type="image/png" sizes="192x192" href="../assets/icon-192.png">
+<link rel="apple-touch-icon" href="../assets/icon-180.png">
+<link rel="stylesheet" href="../styles.css?v=14">
+<link rel="stylesheet" href="./pompes.css?v=15preview">
+<title>CHARRIAUT · Aperçu V15 — Pointage et pompes</title>
+</head>
+<body>
+<div class="shell">
+  <header class="topbar">
+    <button type="button" class="menu-button" id="menuBtn" aria-label="Afficher les rubriques">☰</button><div class="branding"><div class="brand-logo"><img alt="Logo Charriaut" src="../assets/logo-charriaut.png" width="90" height="90" /></div><div class="brand-title">CHARRIAUT</div><div class="brand-subtitle">Chauffage <span aria-hidden="true">•</span> Plomberie</div></div>
+    <button class="icon-button" id="settingsBtn" aria-label="Réglages" title="Réglages"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .32 1.76l.06.06-2 2-.06-.06A1.6 1.6 0 0 0 16 18.4a1.6 1.6 0 0 0-1 .6 1.6 1.6 0 0 0-.38 1v.1h-2.8V20a1.6 1.6 0 0 0-2.4-1.39 1.6 1.6 0 0 0-.43.33l-.07.07-2-2 .07-.07A1.6 1.6 0 0 0 6.58 15a1.6 1.6 0 0 0-1-.36h-.1v-2.8h.1A1.6 1.6 0 0 0 7 9.44a1.6 1.6 0 0 0-.34-.43l-.07-.07 2-2 .07.07A1.6 1.6 0 0 0 11 6.58a1.6 1.6 0 0 0 .36-1v-.1h2.8v.1A1.6 1.6 0 0 0 16.56 7a1.6 1.6 0 0 0 .43-.34l.07-.07 2 2-.07.07A1.6 1.6 0 0 0 18.4 11a1.6 1.6 0 0 0 1 .36h.1v2.8h-.1A1.6 1.6 0 0 0 19.4 15Z" transform="translate(-1.15 -1.15)"/></svg></button>
+  </header>
+
+  <main id="mainApp">
+    <section class="section-card" style="border:2px solid #e7ae42;background:#fff9ec;padding:14px;margin-bottom:14px" aria-label="Aperçu isolé">
+      <strong style="display:block;color:#99550a;font-size:14px">⚠️ APERÇU V15 — NE PAS UTILISER POUR POINTAGE RÉEL</strong>
+      <p style="font-size:12px;line-height:1.5;margin:7px 0 0">La V14 existante est conservée et fonctionne normalement. Les heures saisies sur cette page de démonstration sont stockées séparément. Le suivi des pompes utilise uniquement les compteurs de TEST déjà essayés.</p>
+      <a href="../" style="font-size:12px;font-weight:800;display:inline-block;margin-top:9px;color:#0c5e9c">← Revenir à la V14 officielle</a>
+    </section>
+    <section class="team-profile" aria-label="Compte sur ce téléphone">
+      <div class="team-profile-text"><span class="team-kicker">ESPACE SALARIÉ · DONNÉES PERSONNELLES</span><strong id="profileStatus">Configurer mon profil</strong><small>Ces heures restent enregistrées sur cet appareil.</small></div>
+      <button id="editProfile" class="team-profile-edit" type="button">Mon profil <span aria-hidden="true">›</span></button>
+    </section>
+    <div class="connection-tip" id="connectionTip" role="status"></div><div id="saveStatus" class="save-status" role="status" aria-live="polite">Vérification de la sauvegarde…</div>
+    <section class="month-reminder" id="monthReminder" hidden aria-live="polite">
+      <strong>📩 Dernier jour du mois : pense au relevé !</strong>
+      <p>Vérifie tes pointages, tes paniers repas, les congés/RTT et le contrôle du véhicule. Envoie le PDF à <strong>contact@charriaut.fr</strong>.</p>
+      <button type="button" id="goToReport">Ouvrir mon relevé mensuel →</button>
+    </section>
+
+    <section class="section-card today-card" id="todayCard">
+      <div class="section-heading"><div><div class="eyebrow aqua">MON POINTAGE</div><h2 id="selectedTitle">Aujourd'hui</h2></div><div class="pill" id="dayState">À pointer</div></div>
+      <p class="fine-print">Un appui sur Embauche ou Débauche enregistre automatiquement l’heure du téléphone.</p>
+      <div class="point-grid" id="pointGrid"></div>
+      <datalist id="clientSuggestions"></datalist>
+      <p class="location-reminder" id="locationReminder" hidden></p>
+      <div class="break-section">
+        <div class="section-heading tight"><div><h3>☕ Pause du midi</h3></div></div>
+        <div class="pause-options" id="pauseOptions" role="group" aria-label="Durée de la pause"><button type="button" data-break="20" class="pause-choice">20 min</button><button type="button" data-break="60" class="pause-choice">1 h</button><button type="button" data-break="120" class="pause-choice">2 h</button><button type="button" data-break="custom" class="pause-choice">Autre</button></div>
+        <div class="custom-break" id="customBreak" hidden><label for="customBreakMinutes">Durée réelle de la pause en minutes</label><div class="custom-break-line"><input id="customBreakMinutes" type="number" inputmode="numeric" min="0" max="600" step="1" placeholder="Ex. : 45"><span>minutes</span></div><p>Par exemple : 45 pour 45 min, 90 pour 1 h 30. Saisis 0 uniquement si aucune pause n'a été prise.</p></div>
+        <div id="legacyBreak" class="legacy-break" hidden></div>
+        <div id="pauseInfo" class="pause-info" role="status"></div>
+      </div>
+      <div class="locations-v11" id="locationGrid" aria-label="Lieux du travail"></div>
+      <section class="observation-card" aria-labelledby="observationTitle">
+        <label class="observation-heading" for="dayNote" id="observationTitle"><span aria-hidden="true">✎</span> Observation du jour</label>
+        <textarea id="dayNote" rows="3" maxlength="150" placeholder="Ex. : travaux sur chantier, déplacement, information pour Allison…"></textarea>
+        <div class="observation-foot"><span>La remarque est reprise sur le PDF mensuel.</span><span id="dayNoteStatus" role="status" aria-live="polite">Enregistrement automatique</span></div>
+      </section>
+      <nav class="quick-tiles" aria-label="Accès rapide aux fonctionnalités">
+        <button type="button" id="shortcutMeal" class="quick-tile" aria-label="Panier repas : non sélectionné" aria-pressed="false" title="Activer ou annuler le panier repas du jour"><span class="quick-symbol meal">🍴</span><span>Panier repas</span></button>
+        <button type="button" id="shortcutPdf" class="quick-tile"><span class="quick-symbol pdf">▣</span><span>PDF mensuel</span></button>
+        <button type="button" id="shortcutHistory" class="quick-tile"><span class="quick-symbol history">◴</span><span>Historique</span></button>
+        <button type="button" id="shortcutLeave" class="quick-tile"><span class="quick-symbol holiday">▦</span><span>Congés / RTT</span></button>
+      </nav>
+      <button type="button" id="pumpsOpen" class="pump-entry" aria-label="Ouvrir l'entretien des pompes à vide, version test">
+        <span class="pump-entry-icon" aria-hidden="true">🛠</span>
+        <span class="pump-entry-text"><strong>ENTRETIEN DES POMPES À VIDE <span style="color:#b06115">(TEST)</span></strong><small>🟠 TESTO · 🔵 VALUE · Chronomètres · Vidanges · PDF mensuel</small></span>
+        <span aria-hidden="true" style="font-size:22px">›</span>
+      </button>
+      <div class="mini-mail-note" role="note">ⓘ &nbsp; Rappel fin de mois : envoi à <strong>contact@charriaut.fr</strong></div>
+      <div class="day-totals" id="dayTotals"></div>
+      <details class="pointing-details"><summary>✎ Corriger une heure ou consulter les modifications</summary>
+      <div class="correction-row"><span id="correctionNotice" hidden></span><button type="button" id="viewAudit" disabled>Voir l'historique des modifications</button></div>
+      <button id="offDay" class="link-button">Marquer cette journée non travaillée</button>
+      </details>
+    </section>
+
+    <details class="date-disclosure" id="dateDisclosure"><summary>📅 Choisir une autre date ou corriger un pointage <span aria-hidden="true">⌄</span></summary>
+
+    <section class="weekbar" aria-label="Navigation des semaines"><button class="nav-round" id="prevWeek" aria-label="Semaine précédente">‹</button><div class="week-text"><strong id="weekRange"></strong><span id="weekNumber"></span></div><button class="nav-round" id="nextWeek" aria-label="Semaine suivante">›</button></section>
+    <section class="day-strip" id="dayStrip" aria-label="Choisir un jour"></section>
+    <div class="date-jump"><label for="jumpDate">📅 Aller à une date pour consulter ou corriger</label><input id="jumpDate" type="date" aria-label="Choisir une date à consulter"></div>
+
+    <section class="hero hidden-metrics" aria-hidden="true">
+      <div class="eyebrow">CHARRIAUT · 39 H · MON RELEVÉ</div>
+      <h1>Bonjour <span id="helloName">👋</span></h1>
+      <p>Deux pointages et une pause. Un mois bien suivi.</p>
+      <div class="hero-stats">
+        <div><div class="mini-label">Heures travaillées</div><div class="hero-number" id="weekActual">0h00</div></div>
+        <div class="hero-stat-right"><div class="mini-label">Objectif</div><div class="hero-number">39h00</div></div>
+      </div>
+      <div class="progress-rail" role="progressbar" aria-label="Progression de la semaine" aria-valuemin="0" aria-valuemax="39" aria-valuenow="0" id="progressRail"><div id="progressBar"></div></div>
+    </section>
+    </details>
+    <section class="section-card leave-card" id="leaveCard">
+      <div class="section-heading"><div><div class="eyebrow aqua">CONGÉS & RTT</div><h2>🏖️ Mes absences</h2></div></div>
+      <p class="archive-sub">Ajoute une période du premier au dernier jour inclus. Les congés et RTT apparaissent sur le PDF et ne créent pas artificiellement d'heures en moins.</p>
+      <div class="leave-form">
+        <label>Type d'absence<select id="leaveType"><option value="CP">Vacances / Congés payés</option><option value="RTT">RTT</option></select></label>
+        <div class="leave-dates"><label>Du <input type="date" id="leaveStart"></label><label>Au <input type="date" id="leaveEnd"></label></div>
+        <button class="secondary-btn leave-submit" id="addLeave" type="button">＋ Enregistrer la période</button>
+      </div>
+      <div class="leave-list" id="leaveList"></div>
+      <p class="leave-footnote">Les congés / RTT sont indiqués séparément des heures réellement travaillées. La validation des absences et leur traitement sur la paie restent du ressort du bureau.</p>
+    </section>
+
+    <section class="section-card archive-card" id="archiveCard">
+      <div class="section-heading"><div><div class="eyebrow aqua">ARCHIVE PERSONNELLE</div><h2>Historique de mes heures</h2></div></div>
+      <p class="archive-sub">Tes pointages sont enregistrés avec leur date. Ouvre une journée pour vérifier ou corriger les heures.</p>
+      <div class="archive-nav"><button type="button" id="prevMonth" aria-label="Mois précédent">‹</button><strong id="archiveLabel"></strong><button type="button" id="nextMonth" aria-label="Mois suivant">›</button></div>
+      <div class="archive-count" id="archiveCount"></div>
+      <div id="archiveList" class="archive-list"></div>
+    </section>
+    <section class="section-card summary-card">
+      <div class="section-heading"><div><div class="eyebrow aqua">BILAN CHARRIAUT</div><h2>Ma semaine</h2></div><span class="small-week" id="sumWeek"></span></div>
+      <div class="summary-tiles" id="summaryTiles"></div>
+      <div class="table-scroll"><table class="weekly-table"><thead><tr><th>Jour</th><th>Travail</th><th>Pause</th><th>Fin</th><th>Écart</th></tr></thead><tbody id="weekRows"></tbody></table></div>
+      <p class="summary-followup">Ce bilan reste hebdomadaire pour suivre le seuil de 39 h. Le relevé à envoyer est mensuel, juste en dessous.</p>
+    </section>
+    <section class="section-card month-card" id="monthCard">
+      <div class="section-heading"><div><div class="eyebrow aqua">RELEVÉ À TRANSMETTRE</div><h2>Ma feuille du mois</h2></div><span class="month-format">PDF · 1 feuille</span></div>
+      <p class="archive-sub">Choisis le mois à envoyer. Le PDF rassemble les heures d’arrivée, de départ, la durée de pause réellement prise et les lieux du matin et du soir.</p>
+      <div class="archive-nav month-report-nav">
+        <button type="button" id="prevReportMonth" aria-label="Mois du relevé précédent">‹</button>
+        <label for="reportMonthInput"><span class="month-choice-label">Mois et année</span><input type="month" id="reportMonthInput" aria-label="Mois et année du relevé"></label>
+        <button type="button" id="nextReportMonth" aria-label="Mois du relevé suivant">›</button>
+      </div>
+      <div class="summary-tiles month-tiles" id="monthSummary"></div>
+      <div class="vehicle-check" id="vehicleCheck">
+        <h3>🚐 Contrôle des niveaux du véhicule</h3>
+        <p>Pour <strong id="vehicleMonth"></strong>, le contrôle a-t-il été effectué ?</p>
+        <div class="choice-row" id="vehicleChoices"><button type="button" data-vehicle="yes">✓ Oui</button><button type="button" data-vehicle="no">✕ Non</button></div>
+        <label>Observation (facultative)<input id="vehicleNote" type="text" maxlength="180" placeholder="Ex. : niveau lave-glace à compléter"></label>
+      </div>
+      <p class="month-alert" id="monthWarning" hidden></p>
+      <section class="export-v13" aria-label="Documents mensuels">
+        <div class="export-card-primary">
+          <div class="export-icon">PDF</div>
+          <div><strong>Mon relevé mensuel</strong><small>1 page A4 · Paysage · Directement téléchargeable</small></div>
+          <button class="primary-btn" type="button" id="printPdf">⬇ Télécharger mon PDF</button>
+        </div>
+        <button type="button" class="secondary-btn mail-action" id="sendMail">✉ Préparer le mail à contact@charriaut.fr</button>
+        <details class="export-options"><summary>Autres formats et rappels</summary><button class="secondary-btn" id="exportCsv" type="button">Exporter le CSV du mois</button><button type="button" class="calendar-reminder-btn" id="calendarReminder">📅 Ajouter le rappel mensuel au calendrier</button></details>
+      </section>
+      <section class="backup-v13" aria-label="Sécurité et sauvegardes">
+        <div class="backup-heading"><span class="backup-shield" aria-hidden="true">🛡</span><div><h3>Sécurité de mes pointages</h3><p>Chaque saisie est enregistrée immédiatement sur ce téléphone, avec une copie de secours locale lorsque disponible.</p></div></div>
+        <p class="backup-status" id="backupInlineStatus" role="status">Vérification de l'enregistrement…</p>
+        <button class="backup-download" id="quickBackup" type="button">⬇ Sauvegarder une copie dans Fichiers</button>
+        <button class="backup-restore" id="quickRestore" type="button">↺ Restaurer une sauvegarde</button>
+        <p class="backup-fineprint">Important : une panne normale ne supprime généralement pas les pointages. En revanche, une perte du téléphone ou la suppression des données de l’application peut les effacer. Conserve régulièrement le fichier de sauvegarde en dehors de l’application.</p>
+      </section>
+    </section>
+    <section class="section-card install-card"><div class="section-heading"><div><div class="eyebrow aqua">INSTALLATION & AIDE</div><h2>La même appli pour toute l’équipe</h2></div><span class="month-format">Sans abonnement</span></div>
+      <p class="archive-sub">Chaque salarié installe ce lien sur <strong>son téléphone personnel</strong> et crée son propre profil. Aucun compte central ; pas de données des collègues visibles.</p>
+      <details><summary>Installer sur iPhone (Safari)</summary><p>Ouvre le lien dans Safari, touche le bouton Partager, puis « Sur l’écran d’accueil » / « Ajouter à l’écran d’accueil » et confirme.</p></details>
+      <details><summary>Installer sur Samsung / Android (Chrome)</summary><p>Ouvre le lien dans Chrome, puis touche « Installer l’application » ou le menu ⋮ et « Ajouter à l’écran d’accueil ».</p></details>
+      <details><summary>Conserver ses heures sans les perdre</summary><p>Touche « Sauvegarder mes pointages », garde le fichier JSON dans Fichiers / Drive et refais cette sauvegarde régulièrement. En cas de changement de téléphone, restaure-le depuis les réglages.</p></details>
+    </section>
+    <p class="privacy-note">🔒 Pas de transmission automatique au bureau. Les heures sont stockées sur cet appareil et recopiées dans une seconde mémoire locale quand elle est disponible. Ces copies ne protègent pas contre la perte du téléphone ou la suppression des données de l’application : exporte régulièrement une sauvegarde dans Fichiers ou Drive. N’utilise pas le mode privé. L’envoi du PDF se fait par mail par chaque salarié.</p>
+  </main>
+  <nav class="bottom-nav" aria-label="Navigation rapide"><button type="button" id="navHome">⌂<span>Accueil</span></button><button type="button" id="navHistory">☷<span>Historique</span></button><button type="button" id="navDocs">▤<span>Documents</span></button></nav>
+</div>
+
+<dialog id="settingsDialog" aria-labelledby="settingsTitle"><form method="dialog" class="dialog-content"><div class="dialog-head"><h2 id="settingsTitle">Mon profil salarié</h2><button aria-label="Fermer" class="icon-button" value="cancel">✕</button></div><p class="onboarding-help" id="onboardingHelp">Bienvenue ! Renseigne une seule fois ton nom, ton prénom et ton e-mail. Tes heures seront ensuite liées à ce profil sur ce téléphone.</p><label class="setting"><span>Prénom du salarié</span><input id="firstName" required type="text" placeholder="Prénom" autocomplete="given-name"></label><label class="setting"><span>Nom du salarié</span><input id="lastName" required type="text" placeholder="Nom de famille" autocomplete="family-name"></label><p id="legacyNameNotice" class="setting-legacy" hidden></p><label class="setting"><span>Adresse e-mail du salarié (affichée sur le PDF)</span><input id="employeeEmail" required type="email" placeholder="prenom.nom@exemple.fr" autocomplete="email"></label><label class="setting"><span>E-mail du bureau pour les relevés (fixe)</span><input id="recipient" type="email" value="contact@charriaut.fr" readonly></label><div class="setting"><span>Objectif hebdomadaire</span><p class="muted">39 h : 8 h du lundi au jeudi et 7 h le vendredi.</p></div><div class="setting"><span>Sauvegardes</span><p class="muted" id="backupState">Aucune sauvegarde connue.</p><div class="secondary-actions"><button class="secondary-btn" id="backupBtn" type="button">Télécharger une copie JSON</button><button class="secondary-btn" id="restoreBtn" type="button">Restaurer</button></div><input id="restoreFile" type="file" accept="application/json,.json" hidden></div><p class="data-caution">Un profil par téléphone / navigateur : modifier le nom ne sépare pas les anciens pointages d’un autre salarié.</p><button class="primary-btn" type="submit">Enregistrer mon profil</button></form></dialog>
+<dialog id="auditDialog" aria-labelledby="auditTitle"><div class="dialog-content"><div class="dialog-head"><h2 id="auditTitle">Modifications</h2><button type="button" id="closeAudit" class="icon-button" aria-label="Fermer les modifications" onclick="document.getElementById('auditDialog').close()">✕</button></div><p class="audit-sub">Les anciens horaires sont conservés pour vérifier les corrections.</p><div id="auditRows"></div></div></dialog>
+<section class="print-sheet" id="printSheet" aria-hidden="true"></section>
+<div id="toast" role="status" aria-live="polite"></div>
+<script src="./app.js?v=15preview" defer></script>
+<script type="module" src="./pompes.js?v=15preview"></script>
+</body>
+</html>
