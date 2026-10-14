@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow"><meta name="theme-color" content="#0c477c">
+<title>CHARRIAUT · Import historique pompes</title>
+<style>
+*{box-sizing:border-box}body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#eef4f9;color:#19334c;margin:0}
+main{max-width:700px;margin:22px auto;padding:0 14px 60px}
+header{background:#0e4c80;color:white;padding:22px;border-radius:18px}header h1{margin:5px 0;font-size:23px}header small{font-size:11px;letter-spacing:1px;font-weight:750}header p{color:#dae9f5}
+section{padding:18px;border:1px solid #d7e5f0;background:white;border-radius:16px;margin-top:14px}
+section h2{font-size:18px;margin:0 0 10px}.muted{font-size:12px;color:#627b91;line-height:1.5}
+.notice{background:#fff7e9;border-color:#f1dbaa}.ok{color:#137149}.error{color:#a12d22}
+label{display:block;font-weight:700;font-size:13px;margin:10px 0 5px}
+input[type=email],input[type=file]{padding:12px;border:1px solid #c3d5e2;border-radius:10px;width:100%;font-size:15px}
+input[type=checkbox]{transform:scale(1.2);margin-right:8px}
+button{margin-top:12px;border:0;border-radius:10px;background:#126bad;color:#fff;padding:12px 17px;cursor:pointer;font-weight:800;font-size:14px}
+button:disabled{background:#aab9c5;cursor:not-allowed}.secondary{background:#e7f0f7;color:#1f557d}
+.metrics{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-top:10px}.metrics div{border:1px solid #d7e3ee;border-radius:11px;padding:12px}.metrics strong{display:block;font-size:20px}
+.testo{color:#dc7b1a}.value{color:#3777ca}
+#log{white-space:pre-wrap;word-break:break-word;font-size:12px;border-radius:10px;background:#f4f8fc;padding:12px;max-height:160px;overflow:auto}
+footer{text-align:center;color:#6f8296;font-size:12px;margin-top:22px}a{color:#1a679e}
+</style></head><body>
+<main><header><small>CHARRIAUT · OUTILLAGE</small><h1>Import de l’ancien suivi des pompes</h1><p>Archive 2026 – TESTO et VALUE. Cette page ne modifie pas les pointages V14.</p></header>
+<section class="notice"><strong>Import réservé à l'administrateur.</strong><p class="muted">Le fichier est lu localement sur cet appareil : les clients et leurs interventions ne sont jamais publiés dans le dépôt GitHub. Les données seront envoyées uniquement à Firestore après confirmation. L'import ne modifie pas les compteurs en cours.</p></section>
+<section><h2>1. Vérifier l'accès Firebase</h2><p id="authStatus">Vérification de la session...</p>
+<div id="loginBlock" hidden><form id="emailForm"><label for="email">Adresse e-mail autorisée Charriaut</label><input id="email" type="email" required autocomplete="email"><button id="emailButton" type="submit">Recevoir mon lien d'accès</button></form><p class="muted">La formule Firebase Spark limite l'envoi à 5 liens par jour. Si tu es déjà connecté depuis la page de test des pompes sur ce navigateur, aucun nouvel e-mail n'est nécessaire.</p></div>
+<button id="logout" class="secondary" type="button" hidden>Me déconnecter</button></section>
+<section id="fileBlock" hidden><h2>2. Charger le fichier historique</h2><label for="file">Fichier JSON « charriaut_pompes_historique_2026_import.json »</label><input type="file" id="file" accept=".json,application/json">
+<div id="summary" hidden><div class="metrics"><div><span class="testo">TESTO</span><strong id="testoTotal">—</strong><small>Anciennes utilisations</small></div><div><span class="value">VALUE</span><strong id="valueTotal">—</strong><small>Anciennes utilisations</small></div></div><p id="count"></p><p class="muted">Attention : une utilisation n'a pas de date ; une vidange d'octobre a une date incomplète. Ces informations seront gardées telles quelles, sans inventer de date.</p></div>
+<label><input id="agree" type="checkbox" disabled>Je confirme l'import dans l'historique (sans toucher aux compteurs ni aux pointages).</label>
+<button id="import" type="button" disabled>Importer l'historique dans Firebase</button></section>
+<section><h2>État de l’opération</h2><p id="status" role="status" aria-live="polite">Prêt à vérifier la connexion.</p><pre id="log">Aucune écriture effectuée.</pre></section>
+<footer><a href="../">Retour à Charriaut</a> · Import protégé par les règles Firebase</footer></main>
+<script type="module">
+import {initializeApp} from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
+import {getAuth,onAuthStateChanged,sendSignInLinkToEmail,isSignInWithEmailLink,signInWithEmailLink,signOut} from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
+import {getFirestore,doc,getDoc,runTransaction,serverTimestamp} from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
+const cfg={apiKey:"AIzaSyAtm8CARaeWyh_ncvjcxATTOJQS3ppyZNc",authDomain:"charriaut-entretien.firebaseapp.com",projectId:"charriaut-entretien",storageBucket:"charriaut-entretien.firebasestorage.app",messagingSenderId:"878437191970",appId:"1:878437191970:web:f2a2ac7319d48b9113957b"};
+const app=initializeApp(cfg),auth=getAuth(app),db=getFirestore(app);
+const $=id=>document.getElementById(id), msg=e=>String(e?.message||e||'Erreur inconnue');
+let admin=false,records=[],running=false;
+const status=(s,error=false)=>{$('status').textContent=s;$('status').className=error?'error':'ok'};
+const log=(s)=>{$('log').textContent=s};
+const setControls=()=>{
+ $('fileBlock').hidden=!admin;
+ $('agree').disabled=records.length!==23||!admin||running;
+ $('import').disabled=records.length!==23||!admin||!$('agree').checked||running;
+};
+function validate(x){
+ if(x?.format!=='charriaut-pompes-legacy-v1'||!Array.isArray(x.records)||x.records.length!==23)throw Error("Ce fichier n'est pas l'archive Charriaut des 23 opérations.");
+ const seen=new Set();let testo=0,value=0,uses=0,oils=0;
+ const result=x.records.map(r=>{
+  if(!/^legacy-2026-sheet-r[0-9]{3}-(testo|value)$/.test(r.id)||!['testo','value'].includes(r.pumpId)||!r.id.endsWith('-'+r.pumpId)||seen.has(r.id))throw Error('Identifiant invalide ou doublon.');
+  seen.add(r.id);
+  if(!Number.isInteger(r.sourceRow)||r.sourceRow<2||r.sourceRow>40||!r.id.includes('-r'+String(r.sourceRow).padStart(3,'0')+'-'))throw Error('Ligne d’origine incorrecte.');
+  if(!['oil','usage'].includes(r.type))throw Error('Type d’opération inconnu.');
+  if(r.date!==null&&!/^2026-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/.test(r.date||''))throw Error('Date incorrecte.');
+  if(typeof r.dateAsWritten!=='string'&&r.dateAsWritten!==null)throw Error('Date originale incorrecte.');
+  const duration=r.durationMinutes;
+  if(r.type==='usage'&&(!Number.isInteger(duration)||duration<=0||duration>1440))throw Error('Durée invalide.');
+  if(r.type==='oil'&&duration!==null)throw Error('Vidange sans durée attendue.');
+  const strings=['operation','client','gasAsWritten','employee'];
+  for(const key of strings)if(r[key]!==null&&(typeof r[key]!=='string'||r[key].length>160))throw Error('Champ texte incorrect : '+key);
+  if(r.type==='usage'){uses++;if(r.pumpId==='testo')testo+=duration;else value+=duration;}else oils++;
+  return {id:r.id,pumpId:r.pumpId,type:r.type,sourceRow:r.sourceRow,sourceName:'Temps pompe vide',sourceSheet:'Feuille 1',sourceYear:2026,isHistorical:true,date:r.date,dateAsWritten:r.dateAsWritten, durationMinutes:duration, operation:r.operation,client:r.client,gasAsWritten:r.gasAsWritten,employee:r.employee};
+ });
+ if(uses!==20||oils!==3||testo!==2460||value!==300)throw Error('Les durées ne correspondent pas à la feuille originale.');
+ return {result,testo,value,uses,oils};
+}
+$('file').addEventListener('change',async e=>{
+ records=[];$('agree').checked=false;$('summary').hidden=true;setControls();
+ try{
+  const f=e.target.files?.[0];if(!f)return;
+  if(f.size>1000000)throw Error('Fichier trop volumineux.');
+  const parsed=validate(JSON.parse(await f.text()));
+  records=parsed.result;
+  $('testoTotal').textContent=(parsed.testo/60)+' h';
+  $('valueTotal').textContent=(parsed.value/60)+' h';
+  $('count').textContent=parsed.uses+' utilisations + '+parsed.oils+' mentions de vidange = '+records.length+' opérations.';
+  $('summary').hidden=false;
+  status('Fichier vérifié, aucune donnée envoyée pour le moment.');
+  log('Prêt : '+records.length+' opérations. Le clic « Importer » fera l’envoi sécurisé.');
+ }catch(err){status('Fichier refusé : '+msg(err),true);log('Aucune écriture effectuée.');}
+ setControls();
+});
+$('agree').addEventListener('change',setControls);
+$('import').addEventListener('click',async()=>{
+ if(!admin||running||records.length!==23||!$('agree').checked)return;
+ if(!window.confirm('Importer 23 opérations historiques dans Firebase ? Les compteurs TESTO et VALUE ne seront pas modifiés.'))return;
+ running=true;setControls();let inserted=0,skipped=0;
+ try{
+  for(let i=0;i<records.length;i++){
+   const r=records[i];
+   if(!auth.currentUser?.emailVerified||!admin)throw Error('Connexion administrateur interrompue.');
+   const dest=doc(db,'pumps',r.pumpId,'history',r.id);
+   const state=await runTransaction(db,async transaction=>{
+    const existing=await transaction.get(dest);
+    if(existing.exists())return 'existing';
+    const {id,...data}=r;
+    transaction.set(dest,{...data,importedBy:auth.currentUser.email.toLowerCase(),importedAt:serverTimestamp()});
+    return 'inserted';
+   });
+   if(state==='inserted')inserted++;else skipped++;
+   log('Opérations traitées : '+(i+1)+'/23 · nouvelles : '+inserted+' · déjà présentes : '+skipped);
+  }
+  status('Import terminé : '+inserted+' nouvelles opérations, '+skipped+' déjà présentes.');
+ }catch(err){
+  status('Import interrompu : '+msg(err)+'. Les lignes déjà importées ne seront pas dupliquées si tu relances.',true);
+ }finally{running=false;setControls();}
+});
+$('emailForm').addEventListener('submit',async e=>{
+ e.preventDefault();const email=$('email').value.trim().toLowerCase();$('emailButton').disabled=true;
+ try{
+  await sendSignInLinkToEmail(auth,email,{url:'https://okajb.github.io/pointage-charriaut/import-pompes/',handleCodeInApp:true});
+  localStorage.setItem('charriaut-pompes-import-email',email);
+  status('Lien envoyé. Ouvre-le sur cet appareil pour te connecter.');
+ }catch(err){status('Échec du lien : '+msg(err),true);}
+ finally{$('emailButton').disabled=false;}
+});
+$('logout').addEventListener('click',async()=>{await signOut(auth);status('Déconnecté.');});
+onAuthStateChanged(auth,async user=>{
+ admin=false;setControls();$('logout').hidden=!user;
+ if(!user){$('authStatus').textContent='Non connecté';$('loginBlock').hidden=false;return;}
+ $('authStatus').textContent='Compte : '+user.email+'. Vérification des autorisations…';
+ $('loginBlock').hidden=true;
+ try{
+  if(!user.emailVerified||!user.email)throw Error('E-mail non vérifié.');
+  const a=await getDoc(doc(db,'authorizedEmployees',user.email.toLowerCase()));
+  if(!a.exists()||a.data().active!==true||a.data().role!=='admin')throw Error("Le champ role = admin doit être ajouté à ton profil authorizedEmployees dans Firebase.");
+  admin=true;$('authStatus').textContent='Administrateur identifié : '+user.email;
+  status('Accès administrateur reconnu. Tu peux sélectionner le fichier JSON.');
+ }catch(err){$('authStatus').textContent='Accès import non autorisé : '+msg(err);status('Autorisation administrateur à terminer dans Firebase.',true);}
+ setControls();
+});
+(async()=>{
+ if(!isSignInWithEmailLink(auth,location.href))return;
+ const email=localStorage.getItem('charriaut-pompes-import-email')||prompt('Quelle est ton adresse e-mail pour confirmer ce lien ?');
+ if(!email)return;
+ try{await signInWithEmailLink(auth,email.toLowerCase(),location.href);localStorage.removeItem('charriaut-pompes-import-email');history.replaceState(null,'',location.origin+location.pathname);}
+ catch(err){status('Lien non validé : '+msg(err),true);}
+})();
+</script></body></html>
