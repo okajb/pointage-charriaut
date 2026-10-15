@@ -33,6 +33,7 @@ const dateTime=t=>new Date(t).toLocaleString('fr-FR',{dateStyle:'short',timeStyl
 const dur=s=>Math.floor(Math.max(0,s)/3600)+' h '+pad(Math.floor(Math.max(0,s)%3600/60))+' min';
 const secPart=s=>pad(Math.floor(Math.max(0,s)%60))+' s';
 const durPrecise=s=>dur(s)+' '+secPart(s);
+const durRecord=s=>{const n=Math.max(0,Math.floor(Number(s)||0)); return dur(n)+(n%60?' '+pad(n%60)+' s':'');};
 const ms=ts=>ts?.toMillis?.()??0;
 const PUMPS={testo:{name:'TESTO',color:'orange'},value:{name:'VALUE',color:'blue'}};
 const state={selected:'testo',user:null,approved:false,isAdmin:false,pumps:{},events:{testo:[],value:[]},archives:{testo:[],value:[]},unsub:[],busy:false};
@@ -157,7 +158,7 @@ function render(){
   '<form class="pump-info" id="pumpStartForm"><div class="pump-fields"><label>Nature du fluide / gaz<select name="gas" required><option>R32</option><option>R410A</option><option>AZOTE</option><option>AZOTE HYDROGÉNÉ</option><option value="AUTRE">Autre</option></select></label><label>Si autre : préciser<input name="other" maxlength="80" placeholder="Gaz utilisé"></label><label>Opération<select name="job"><option>Tirage au vide</option><option>Contrôle</option><option>Entretien</option><option>Autre intervention</option></select></label><label>Observation<textarea name="note" maxlength="600" rows="2" placeholder="Chantier, remarque..."></textarea></label></div><button type="submit" class="pump-action start" '+(initialized?'':'disabled title="Effectuer et enregistrer la vidange initiale"')+'>▶ DÉPART</button>'+(initialized?'':'<p class="pump-muted">L’administrateur doit initialiser le nouveau suivi avant le démarrage.</p>')+'</form>')+
   '<div class="pump-info"><button class="pump-oil" id="pumpOil" '+(run||!initialized?'disabled':'')+' type="button">✓ Vidange effectuée — remettre le compteur à zéro</button><p class="pump-muted">Chaque utilisation et vidange est enregistrée dans l’historique partagé, avec le compte du salarié.</p></div>'+
   '<section class="pump-history"><div class="pump-history-head"><h3>Historique '+p.name+'</h3><span>'+hist.length+' opérations affichées</span></div>'+
-  (hist.length?'<div class="pump-events">'+hist.map(e=>'<div class="pump-event"><span><strong>'+(e.type==='oil'?'🛢 Vidange':esc(e.job||'Utilisation'))+'</strong><small>'+esc(ms(e.at)?dateTime(ms(e.at)):'Date en cours de sauvegarde')+' · '+esc(e.person||e.byName||e.byEmail||'')+'</small>'+(e.gas?'<small>Fluide : '+esc(e.gas)+'</small>':'')+(e.note?'<small>'+esc(e.note)+'</small>':'')+'</span><b>'+(e.type==='oil'?'✓':dur(e.seconds||0))+'</b></div>').join('')+'</div>':'<p class="pump-muted">Aucune opération enregistrée.</p>')+'</section>'+
+  (hist.length?'<div class="pump-events">'+hist.map(e=>'<div class="pump-event"><span><strong>'+(e.type==='oil'?'🛢 Vidange':esc(e.job||'Utilisation'))+'</strong><small>'+esc(ms(e.at)?dateTime(ms(e.at)):'Date en cours de sauvegarde')+' · '+esc(e.person||e.byName||e.byEmail||'')+'</small>'+(e.gas?'<small>Fluide : '+esc(e.gas)+'</small>':'')+(e.note?'<small>'+esc(e.note)+'</small>':'')+'</span><b>'+(e.type==='oil'?'✓':durRecord(e.seconds||0))+'</b></div>').join('')+'</div>':'<p class="pump-muted">Aucune opération enregistrée.</p>')+'</section>'+
   '<section class="pump-history pump-legacy"><div class="pump-history-head"><h3>Archives 2026 · '+p.name+'</h3><span>'+dur(legacyMin*60)+' cumulées</span></div><p class="pump-muted">'+legacy.length+' anciennes opérations enregistrées séparément du compteur actuel.</p><div class="pump-events">'+legacy.map(e=>'<div class="pump-event"><span><strong>'+(e.type==='oil'?'🛢 Vidange':esc(e.operation||'Utilisation'))+'</strong><small>'+esc(e.dateAsWritten||'Date inconnue')+(e.client?' · Client : '+esc(e.client):'')+(e.gasAsWritten?' · Gaz : '+esc(e.gasAsWritten):'')+'</small></span><b>'+(e.type==='oil'?'✓':dur((e.durationMinutes||0)*60))+'</b></div>').join('')+'</div></section>'+
   '<div class="pump-report"><label>Mois du relevé <input id="pumpsMonth" type="month" value="'+date(Date.now()).slice(0,7)+'"></label><button type="button" id="pumpPDF">Imprimer / PDF mensuel (2 pompes)</button></div>';
   tickLive();
@@ -302,8 +303,8 @@ function report(month){
     return [...current,...archive];
   }).sort((a,b)=>a.sort-b.sort || a.pump.localeCompare(b.pump));
   const total=(id,old)=>rows.filter(e=>e.pump===id&&e.old===old&&e.seconds!==null).reduce((sum,e)=>sum+e.seconds,0);
-  const totalText=old=>'TESTO : '+dur(total('testo',old))+' · VALUE : '+dur(total('value',old));
-  const tableRows=rows.map(e=>'<tr><td>'+esc(e.date)+'</td><td>'+esc(PUMPS[e.pump].name)+'</td><td>'+esc(e.person||'—')+'</td><td>'+esc(e.op)+'</td><td>'+esc(e.client||'—')+'</td><td>'+esc(e.gas||'—')+'</td><td>'+(e.seconds===null?'—':dur(e.seconds))+'</td><td>'+esc(e.note||'')+'</td></tr>').join('');
+  const totalText=old=>'TESTO : '+durRecord(total('testo',old))+' · VALUE : '+durRecord(total('value',old));
+  const tableRows=rows.map(e=>'<tr><td>'+esc(e.date)+'</td><td>'+esc(PUMPS[e.pump].name)+'</td><td>'+esc(e.person||'—')+'</td><td>'+esc(e.op)+'</td><td>'+esc(e.client||'—')+'</td><td>'+esc(e.gas||'—')+'</td><td>'+(e.seconds===null?'—':durRecord(e.seconds))+'</td><td>'+esc(e.note||'')+'</td></tr>').join('');
   printArea.innerHTML='<div class="pump-print"><h1>CHARRIAUT · Entretien des pompes à vide</h1>'+
     '<p>Relevé mensuel '+esc(month)+' · Édité le '+date(Date.now())+'</p>'+
     '<div class="pump-print-summary"><strong>Nouveau suivi :</strong> '+totalText(false)+
