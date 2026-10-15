@@ -1,6 +1,6 @@
-/* CHARRIAUT – module pompes à vide V15 pilote Firebase
-   Module autonome : ne modifie aucune donnée de pointage V14.
-   Sessions et vidanges partagées via Firestore. Pas de fonctionnement hors ligne pour les opérations. */
+/* CHARRIAUT – préparation module pompes à vide réelles V15
+   Branche séparée : aucune modification du pointage V14 ni déploiement sur main.
+   Sessions et vidanges partagées via Firestore. Pas d'écriture hors ligne. */
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js';
 import {
   getAuth,onAuthStateChanged,sendSignInLinkToEmail,isSignInWithEmailLink,
@@ -57,8 +57,9 @@ const userProfile=()=>{
     return {name:[s.firstName,s.lastName].filter(Boolean).join(' ').trim()||s.name||'',email:String(s.employeeEmail||'').trim().toLowerCase()};
   }catch(e){return {name:'',email:''};}
 };
-const PILOT_MODE = true; // Aperçu V15 : compteurs de test uniquement, pas les pompes réelles.
+const PILOT_MODE = false; // Préparation : lit les véritables documents pumps/testo et pumps/value.
 async function createPilotPumps(){
+  if(!PILOT_MODE){err(Error('La création de nouvelles pompes réelles est interdite depuis cette interface.'));return;}
   if(!state.isAdmin){err(Error('Réservé à l’administrateur.'));return;}
   if(!confirm('Créer deux compteurs DE TEST TESTO et VALUE dans Firebase ? Les véritables pompes restent inchangées.'))return;
   try {
@@ -78,7 +79,7 @@ async function createPilotPumps(){
 }
 document.addEventListener('click',e=>{if(e.target.closest('#createPilotPumps'))createPilotPumps();});
 const authReady=()=>state.user&&state.approved;
-const refs=id=>doc(db,'pilotPumps',id);
+const refs=id=>doc(db,PILOT_MODE?'pilotPumps':'pumps',id);
 function stopListening(){
   state.unsub.splice(0).forEach(u=>{try{u();}catch(e){}});
   state.pumps={};state.events={testo:[],value:[]};state.archives={testo:[],value:[]};
@@ -148,8 +149,8 @@ function render(){
   const hist=(state.events[id]||[]).slice().sort((a,b)=>ms(b.at)-ms(a.at)).slice(0,45);
   const legacy=(state.archives[id]||[]).slice().sort((a,b)=>a.sourceRow-b.sourceRow);
   const legacyMin=legacy.filter(e=>e.type==='usage').reduce((n,e)=>n+(e.durationMinutes||0),0);
-  $('pumpsContent').innerHTML='<div class="pump-user-line">Connecté : '+esc(state.user.email)+' · APERÇU V15 / TEST <button type="button" id="pumpLogout">Déconnexion</button></div>'+
-  (!state.pumps.testo || !state.pumps.value?'<div class="pump-info"><p class="pump-muted">Les compteurs de test sont à créer avant le premier essai.</p>'+(state.isAdmin?'<button type="button" class="pump-action start" id="createPilotPumps">Créer les deux pompes de test</button>':'')+'</div>':'')+
+  $('pumpsContent').innerHTML='<div class="pump-user-line">Connecté : '+esc(state.user.email)+' · '+(PILOT_MODE?'APERÇU V15 / TEST':'POMPES RÉELLES · PRÉPARATION')+' <button type="button" id="pumpLogout">Déconnexion</button></div>'+
+  (!state.pumps.testo || !state.pumps.value?'<div class="pump-info"><p class="pump-muted">'+(PILOT_MODE?'Les compteurs de test sont à créer avant le premier essai.':'Document de pompe réelle absent : contacter l’administrateur.')+'</p>'+(PILOT_MODE&&state.isAdmin?'<button type="button" class="pump-action start" id="createPilotPumps">Créer les deux pompes de test</button>':'')+'</div>':'')+
   '<div class="pump-tabs">'+pick('testo')+pick('value')+'</div>'+
   '<section class="pump-counter '+cl+'" id="pumpCounter"><div class="pump-counter-top"><strong>'+p.name+'</strong><span id="pumpStatus">'+status+'</span></div><div class="pump-time"><span id="pumpElapsedTotal">'+dur(total)+'</span> <span class="pump-seconds" id="pumpElapsedSeconds">'+secPart(total)+'</span> <small>/ '+(d.oilIntervalHours||10)+' h</small></div><div class="pump-rail"><div id="pumpProgress" style="width:'+Math.min(100,100*total/interval)+'%"></div></div><small>'+(d.lastOilAt?'Dernière vidange réelle : '+dateTime(ms(d.lastOilAt)):'Date de la dernière vidange inconnue. Le zéro est uniquement le départ du suivi.')+'</small></section>'+
   (!initialized?'<div class="pump-info"><p class="pump-muted">Le nouvel historique commence à zéro, sans déclaration de vidange d’huile.</p>'+(state.isAdmin?'<button type="button" id="pumpInit" class="pump-action start">Initialiser le suivi à 0 h 00</button>':'<p class="pump-muted">En attente de l’initialisation par un administrateur.</p>')+'</div>':'')+
@@ -239,7 +240,6 @@ async function finishSession(){
   });
 }
 async function initBaseline(){
-  if(!PILOT_MODE)throw Error('Initialisation interdite hors pilote.');
   if(!state.isAdmin){err(Error('Initialisation réservée à l’administrateur.'));return;}
   if(!confirm('Initialiser '+PUMPS[state.selected].name+' à 0 h 00 ? Cela ne valide AUCUNE vidange réelle et conserve les archives.'))return;
   await requireRun(async ()=>{
