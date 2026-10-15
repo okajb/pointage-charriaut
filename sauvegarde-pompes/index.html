@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><meta name="theme-color" content="#0e4c7c">
+<title>CHARRIAUT · Sauvegarde pompes</title>
+<style>
+:root{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#1b3c57;background:#eef4f9}*{box-sizing:border-box}
+body{margin:0}main{max-width:720px;margin:28px auto;padding:0 16px 36px}
+header{padding:22px;border-radius:18px;background:#125181;color:white}header h1{font-size:24px;margin:8px 0}header p{color:#e1effb;line-height:1.5}
+section{background:white;border:1px solid #dbe5ef;border-radius:15px;padding:18px;margin-top:16px}
+h2{font-size:18px;margin:0 0 10px}p{font-size:14px;line-height:1.55;color:#496580}button{border:0;background:#176ba6;color:white;padding:13px 18px;border-radius:10px;font-weight:750;cursor:pointer;font-size:15px}
+button:disabled{opacity:.5;cursor:not-allowed}label{display:block;font-size:14px;font-weight:750;margin:12px 0 6px}
+input{font-size:16px;padding:12px;border:1px solid #b6cada;border-radius:9px;width:100%}
+#status{white-space:pre-wrap;line-height:1.6;overflow-wrap:anywhere;font-size:14px}
+.notice{border-left:4px solid #de9c27;padding:12px 14px;background:#fff5dc;border-radius:7px}
+#summary{background:#edf7ff;border-radius:9px;padding:12px;line-height:1.8;font-size:14px;white-space:pre-line}
+small{color:#4d6a82}
+footer{margin-top:20px;text-align:center;font-size:13px}a{color:#126297}
+</style></head><body><main>
+<header><small style="color:#d2e6f4;font-weight:700">CHARRIAUT · SAUVEGARDE AVANT MISE EN SERVICE</small>
+<h1>Copie de sécurité des pompes</h1><p>Lecture uniquement. Aucun chronomètre, aucune vidange et aucun pointage ne seront modifiés.</p></header>
+<section><h2>1. Vérifier l'accès</h2><p id="authState">Vérification de ta session Firebase…</p>
+<form id="loginForm" hidden><label for="email">E-mail administrateur</label><input type="email" id="email" autocomplete="email" required>
+<button type="submit" style="margin-top:12px">Recevoir un lien de connexion</button></form></section>
+<section><h2>2. Sauvegarder sur ton Mac</h2>
+<p>Le fichier contient les deux documents réels TESTO et VALUE, leurs anciennes opérations, ainsi que les compteurs et opérations de test séparés pour référence.</p>
+<p class="notice">Données de chantiers potentiellement confidentielles. Le fichier JSON est enregistré <strong>sur ton Mac uniquement</strong> : ne le publie pas sur GitHub et conserve-le dans un dossier privé.</p>
+<button id="backup" type="button" disabled>Télécharger la sauvegarde JSON</button>
+<div id="status" role="status" aria-live="polite"></div>
+<div id="summary" hidden></div></section>
+<footer><a href="../apercu-v15/">Retour à l'aperçu V15</a></footer>
+<script type="module" src="./backup.js?v=1"></script>
+</main></body></html>
