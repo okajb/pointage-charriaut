@@ -111,7 +111,7 @@ function render(){
       status.textContent=initialized?"Suivi déjà initialisé":"Suivi non initialisé";
       const count=document.createElement('div');count.className="time";
       count.textContent=initialized?Math.floor((d.usedSeconds||0)/3600)+" h "+String(Math.floor(((d.usedSeconds||0)%3600)/60)).padStart(2,"0")+" min":"0 h 00 min";
-      card.append(heading,status,count);
+      card.append(count);
       details.textContent="Archives : "+state.archiveCount+" / "+p.archives+" attendues. "+
         (initialized?"Initialisation déjà effectuée. ":"Dernière vidange non déclarée par cette opération. ")+
         (oilUnknown?"Date de dernière vidange inconnue.":"Date de dernière vidange déjà renseignée.");
@@ -121,7 +121,7 @@ function render(){
       if(!blank){details.textContent+=" ⚠️ Compteur ou session déjà actif : initialisation bloquée.";}
       if(!initialized&&archivesOK&&blank){action.addEventListener('click',()=>initializeOne(p.id));}
     }
-    card.append(heading,status,details,action);$('pumps').append(card);
+    card.prepend(heading,status);card.append(details,action);$('pumps').append(card);
   }
 }
 async function refresh(){
@@ -147,6 +147,7 @@ async function initializeOne(id){
   if(!state||state.archiveCount!==p.archives||state.data.trackingStartedAt)return;
   if(!window.confirm("CONFIRMATION — vraie pompe "+p.name+"\n\nDémarrer le nouveau suivi à 0 h 00 ?\n\nAucune vidange enregistrée. Les "+p.archives+" archives de cette pompe resteront intactes.\n\nCette initialisation ne sera pas répétable."))return;
   busy=true;render();notice("Initialisation en cours pour "+p.name+"…");
+  let completed=false;
   try{
     const ref=doc(db,'pumps',id);
     await runTransaction(db,async tx=>{
@@ -164,9 +165,13 @@ async function initializeOne(id){
         lastActionAt:serverTimestamp()
       });
     });
-    notice("✅ Initialisation "+p.name+" enregistrée. Le suivi commence à zéro, sans déclaration de vidange.");
+    completed=true;
   }catch(e){notice("❌ Initialisation NON confirmée : "+String(e.message||e),true);}
-  finally{busy=false;await refresh();}
+  finally{
+    busy=false;
+    await refresh();
+    if(completed)notice("✅ Initialisation "+p.name+" enregistrée et vérifiée. Le suivi commence à zéro, sans déclaration de vidange.");
+  }
 }
 $('loginForm').addEventListener('submit',async e=>{
   e.preventDefault();
