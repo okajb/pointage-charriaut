@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#0c477c">
+  <meta name="robots" content="noindex,nofollow">
+  <title>CHARRIAUT · Initialisation administrateur des pompes</title>
+  <style>
+    :root{color-scheme:light;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    *{box-sizing:border-box}body{margin:0;background:#edf3f8;color:#17364f;line-height:1.5}
+    .wrap{max-width:800px;margin:0 auto;padding:24px 16px 48px}
+    header{background:#0b477b;color:white;padding:20px 22px;border-radius:17px}
+    header small{font-weight:700;letter-spacing:.08em;opacity:.83}h1{font-size:1.5rem;margin:7px 0 3px}
+    p{margin:8px 0}h2{margin:0 0 6px;font-size:1.2rem}
+    .panel{background:white;border:1px solid #d7e3ed;border-radius:15px;padding:19px;margin-top:16px}
+    .notice{border-left:4px solid #dd9c1c;background:#fff7e3;padding:13px 15px;border-radius:7px}
+    .muted{color:#53687a;font-size:.94rem}
+    button{font:inherit;border-radius:10px;padding:12px 15px;font-weight:700;cursor:pointer;border:0}
+    button:disabled{opacity:.5;cursor:not-allowed}
+    .primary{background:#0b5a99;color:white}.danger{background:#bb501e;color:white}
+    .secondary{border:1px solid #a6bdcf;background:#fff;color:#0b477b}
+    .actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:14px}
+    input[type=email]{width:100%;font:inherit;padding:11px;border:1px solid #9aaebe;border-radius:9px;max-width:390px}
+    label{display:block;font-weight:600;margin:12px 0 5px}
+    #feedback{white-space:pre-wrap;padding:10px 0;min-height:32px}
+    .error{color:#a52116}.ok{color:#14633d}
+    .pumps{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+    .pump{border:2px solid #cbdbe7;border-radius:13px;padding:16px}
+    .pump.orange{border-color:#eba46a}.pump.blue{border-color:#85b9ec}
+    .pump strong{font-size:1.2rem}.status{font-weight:700;margin:8px 0}
+    .time{font-size:1.55rem;font-weight:800}
+    .pump button{width:100%;margin-top:12px}
+    [hidden]{display:none!important}
+    @media(max-width:560px){.pumps{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+<main class="wrap">
+  <header>
+    <small>CHARRIAUT · OUTIL ADMINISTRATEUR · V15</small>
+    <h1>Initialisation des pompes réelles</h1>
+    <p>🟠 TESTO &nbsp;·&nbsp; 🔵 VALUE</p>
+  </header>
+  <section class="panel">
+    <p class="notice"><strong>Attention : vraies pompes, vraies données.</strong> Cette page sert uniquement à démarrer le <strong>nouveau suivi à 0 h 00</strong>. Cela ne déclare aucune vidange. Les 23 archives de 2026 sont conservées. Les boutons Départ, Fin et Vidange ne sont pas disponibles ici.</p>
+    <p class="muted">Chaque pompe ne peut être initialisée qu'une seule fois. Seul un compte administrateur CHARRIAUT vérifié peut effectuer cette action. Vérifiez l'état réel de l'huile avant d'utiliser la pompe.</p>
+  </section>
+  <section class="panel">
+    <h2>🔐 Accès administrateur</h2>
+    <p id="account" class="muted">Vérification de la connexion…</p>
+    <form id="loginForm" hidden>
+      <label for="email">Adresse e-mail du compte administrateur</label>
+      <input type="email" id="email" required autocomplete="email" placeholder="adresse@gmail.com">
+      <div class="actions"><button type="submit" class="primary">Recevoir un lien de connexion</button></div>
+      <p class="muted">Si vous êtes déjà connecté à la V15 de test sur ce navigateur, votre session peut être reconnue automatiquement.</p>
+    </form>
+    <div class="actions"><button type="button" id="refresh" class="secondary" hidden>Actualiser les états</button><button type="button" id="logout" class="secondary" hidden>Changer de compte</button></div>
+    <p id="feedback" role="status" aria-live="polite"></p>
+  </section>
+  <section id="pumpSection" class="panel" hidden>
+    <h2>État avant initialisation</h2>
+    <p class="muted">Le compteur de chaque pompe sera indépendant des anciennes archives. La date de la dernière vidange reste inconnue tant qu'une vidange réelle n'a pas été confirmée.</p>
+    <div id="pumps" class="pumps"></div>
+  </section>
+  <p class="muted">Après l'initialisation, cette page ne permettra aucune remise à zéro supplémentaire. <a href="../">Retour à l'application de pointage</a></p>
+</main>
+<script type="module">
+import {initializeApp} from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js';
+import {getAuth,onAuthStateChanged,sendSignInLinkToEmail,isSignInWithEmailLink,signInWithEmailLink,signOut} from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js';
+import {getFirestore,doc,collection,getDocFromServer,getDocsFromServer,runTransaction,serverTimestamp} from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
+
+const app=initializeApp({
+  apiKey:"AIzaSyAtm8CARaeWyh_ncvjcxATTOJQS3ppyZNc",
+  authDomain:"charriaut-entretien.firebaseapp.com",
+  projectId:"charriaut-entretien",
+  storageBucket:"charriaut-entretien.firebasestorage.app",
+  messagingSenderId:"878437191970",
+  appId:"1:878437191970:web:f2a2ac7319d48b9113957b"
+});
+const auth=getAuth(app), db=getFirestore(app);
+const $=id=>document.getElementById(id);
+const pumps=[{id:"testo",name:"TESTO",color:"orange",archives:21},{id:"value",name:"VALUE",color:"blue",archives:2}];
+let adminUser=null,busy=false,states={};
+function notice(message,isError=false){
+  $('feedback').textContent=message;
+  $('feedback').className=isError?'error':'ok';
+}
+function signedOut(){
+  adminUser=null;states={};$('pumpSection').hidden=true;$('refresh').hidden=true;
+  $('logout').hidden=true;$('loginForm').hidden=false;$('account').textContent="Connexion administrateur nécessaire.";
+}
+function render(){
+  $('pumps').replaceChildren();
+  for(const p of pumps){
+    const state=states[p.id];
+    const card=document.createElement('article');card.className="pump "+p.color;
+    const heading=document.createElement('strong');heading.textContent=(p.id==="testo"?"🟠 ":"🔵 ")+p.name;
+    const status=document.createElement('div');status.className="status";
+    const details=document.createElement('p');details.className="muted";
+    const action=document.createElement('button');action.type="button";action.className="primary";
+    if(!state||state.error){
+      status.textContent="État indisponible";details.textContent=state?.error||"Chargement…";
+      action.textContent="Initialisation indisponible";action.disabled=true;
+    }else{
+      const d=state.data;
+      const initialized=!!d.trackingStartedAt;
+      const oilUnknown=!d.lastOilAt;
+      const archivesOK=state.archiveCount===p.archives;
+      const blank=d.activeSession==null && (d.usedSeconds??0)===0 && (d.lifetimeSeconds??0)===0;
+      status.textContent=initialized?"Suivi déjà initialisé":"Suivi non initialisé";
+      const count=document.createElement('div');count.className="time";
+      count.textContent=initialized?Math.floor((d.usedSeconds||0)/3600)+" h "+String(Math.floor(((d.usedSeconds||0)%3600)/60)).padStart(2,"0")+" min":"0 h 00 min";
+      card.append(heading,status,count);
+      details.textContent="Archives : "+state.archiveCount+" / "+p.archives+" attendues. "+
+        (initialized?"Initialisation déjà effectuée. ":"Dernière vidange non déclarée par cette opération. ")+
+        (oilUnknown?"Date de dernière vidange inconnue.":"Date de dernière vidange déjà renseignée.");
+      action.textContent=initialized?"Déjà initialisée":"Initialiser "+p.name+" à 0 h 00";
+      action.disabled=busy||initialized||!archivesOK||!blank;
+      if(!archivesOK){details.textContent+=" ⚠️ Nombre d'archives inattendu : initialisation bloquée.";}
+      if(!blank){details.textContent+=" ⚠️ Compteur ou session déjà actif : initialisation bloquée.";}
+      if(!initialized&&archivesOK&&blank){action.addEventListener('click',()=>initializeOne(p.id));}
+    }
+    card.append(heading,status,details,action);$('pumps').append(card);
+  }
+}
+async function refresh(){
+  if(!adminUser)return;
+  busy=true;$('refresh').disabled=true;notice("Vérification des pompes et des archives…");
+  try{
+    const entries=await Promise.all(pumps.map(async p=>{
+      const pump=await getDocFromServer(doc(db,'pumps',p.id));
+      if(!pump.exists())throw Error("Document réel "+p.name+" introuvable.");
+      const history=await getDocsFromServer(collection(db,'pumps',p.id,'history'));
+      const count=history.docs.filter(s=>s.data().isHistorical===true).length;
+      return [p.id,{data:pump.data(),archiveCount:count}];
+    }));
+    states=Object.fromEntries(entries);
+    notice("Données réelles consultées. L'initialisation ne se fait qu'après ton clic de confirmation.");
+  }catch(e){
+    states={};notice("Impossible de vérifier toutes les données : "+String(e.message||e),true);
+  }finally{busy=false;$('refresh').disabled=false;render();}
+}
+async function initializeOne(id){
+  if(!adminUser||busy||!pumps.some(p=>p.id===id))return;
+  const p=pumps.find(p=>p.id===id), state=states[id];
+  if(!state||state.archiveCount!==p.archives||state.data.trackingStartedAt)return;
+  if(!window.confirm("CONFIRMATION — vraie pompe "+p.name+"\n\nDémarrer le nouveau suivi à 0 h 00 ?\n\nAucune vidange enregistrée. Les "+p.archives+" archives de cette pompe resteront intactes.\n\nCette initialisation ne sera pas répétable."))return;
+  busy=true;render();notice("Initialisation en cours pour "+p.name+"…");
+  try{
+    const ref=doc(db,'pumps',id);
+    await runTransaction(db,async tx=>{
+      const snap=await tx.get(ref);
+      if(!snap.exists())throw Error("La pompe n'existe plus.");
+      const d=snap.data();
+      if(d.trackingStartedAt!=null||d.activeSession!=null||(d.usedSeconds??0)!==0||(d.lifetimeSeconds??0)!==0){
+        throw Error("La pompe a déjà un suivi ou une session : opération annulée.");
+      }
+      tx.update(ref,{
+        usedSeconds:0,lifetimeSeconds:0,
+        trackingStartedAt:serverTimestamp(),
+        trackingInitializedBy:adminUser.email.toLowerCase(),
+        oilCondition:"unverified",
+        lastActionAt:serverTimestamp()
+      });
+    });
+    notice("✅ Initialisation "+p.name+" enregistrée. Le suivi commence à zéro, sans déclaration de vidange.");
+  }catch(e){notice("❌ Initialisation NON confirmée : "+String(e.message||e),true);}
+  finally{busy=false;await refresh();}
+}
+$('loginForm').addEventListener('submit',async e=>{
+  e.preventDefault();
+  const email=$('email').value.trim().toLowerCase();
+  try{
+    await sendSignInLinkToEmail(auth,email,{url:window.location.origin+window.location.pathname,handleCodeInApp:true});
+    localStorage.setItem('charriaut.initV15.email',email);
+    notice("Lien envoyé. Ouvre le message sur ce même navigateur pour te connecter.");
+  }catch(err){notice("Lien non envoyé : "+String(err.message||err),true);}
+});
+$('refresh').addEventListener('click',refresh);
+$('logout').addEventListener('click',()=>signOut(auth));
+onAuthStateChanged(auth,async user=>{
+  if(!user){signedOut();return;}
+  $('account').textContent="Vérification du compte "+(user.email||"") +"…";
+  $('loginForm').hidden=true;$('pumpSection').hidden=true;
+  try{
+    if(!user.emailVerified||!user.email)throw Error("Adresse e-mail non vérifiée.");
+    const profile=await getDocFromServer(doc(db,'authorizedEmployees',user.email.trim().toLowerCase()));
+    if(!profile.exists()||profile.data().active!==true||profile.data().role!=="admin")throw Error("Ce compte ne possède pas le rôle administrateur CHARRIAUT.");
+    adminUser=user;
+    $('account').textContent="Administrateur confirmé : "+user.email;
+    $('refresh').hidden=false;$('logout').hidden=false;$('pumpSection').hidden=false;
+    await refresh();
+  }catch(err){
+    adminUser=null;$('account').textContent="Accès administrateur refusé.";
+    $('logout').hidden=false;
+    notice(String(err.message||err),true);
+  }
+});
+(async()=>{
+  if(!isSignInWithEmailLink(auth,window.location.href))return;
+  const email=localStorage.getItem('charriaut.initV15.email')||window.prompt("Confirme l'adresse e-mail administrateur :");
+  if(!email)return;
+  try{
+    await signInWithEmailLink(auth,email,window.location.href);
+    localStorage.removeItem('charriaut.initV15.email');
+    history.replaceState(null,'',window.location.pathname);
+  }catch(err){notice("Connexion impossible : "+String(err.message||err),true);}
+})();
+</script>
+</body>
+</html>
