@@ -12,6 +12,7 @@
 <link rel="icon" type="image/png" sizes="192x192" href="assets/icon-192.png">
 <link rel="apple-touch-icon" href="assets/icon-180.png">
 <link rel="stylesheet" href="styles.css?v=14">
+<link rel="stylesheet" href="pompes-v15.css?v=15-preparation-readonly">
 <title>CHARRIAUT · Pointage équipe V14</title>
 </head>
 <body>
@@ -141,6 +142,15 @@
         <p class="backup-fineprint">Important : une panne normale ne supprime généralement pas les pointages. En revanche, une perte du téléphone ou la suppression des données de l’application peut les effacer. Conserve régulièrement le fichier de sauvegarde en dehors de l’application.</p>
       </section>
     </section>
+    <section class="section-card" aria-label="Entretien des pompes à vide" style="margin-top:16px;padding:14px 16px 18px">
+      <div class="section-heading"><div><div class="eyebrow aqua">ESPACE MATÉRIEL · PRÉPARATION V15</div><h2>Suivi des pompes à vide</h2></div></div>
+      <p class="archive-sub">Vraies pompes TESTO et VALUE : consultation uniquement dans cette préparation. Aucun départ, arrêt ou vidange n'est autorisé.</p>
+      <button type="button" id="pumpsOpen" class="pump-entry" aria-label="Consulter les pompes réelles, préparation sans écriture">
+        <span class="pump-entry-icon" aria-hidden="true">🛠</span>
+        <span class="pump-entry-text"><strong>ENTRETIEN DES POMPES À VIDE <span style="color:#b06115">(PRÉPARATION)</span></strong><small>🟠 TESTO · 🔵 VALUE · Archives · PDF mensuel</small></span>
+        <span aria-hidden="true" style="font-size:22px">›</span>
+      </button>
+    </section>
     <section class="section-card install-card"><div class="section-heading"><div><div class="eyebrow aqua">INSTALLATION & AIDE</div><h2>La même appli pour toute l’équipe</h2></div><span class="month-format">Sans abonnement</span></div>
       <p class="archive-sub">Chaque salarié installe ce lien sur <strong>son téléphone personnel</strong> et crée son propre profil. Aucun compte central ; pas de données des collègues visibles.</p>
       <details><summary>Installer sur iPhone (Safari)</summary><p>Ouvre le lien dans Safari, touche le bouton Partager, puis « Sur l’écran d’accueil » / « Ajouter à l’écran d’accueil » et confirme.</p></details>
@@ -157,5 +167,6 @@
 <section class="print-sheet" id="printSheet" aria-hidden="true"></section>
 <div id="toast" role="status" aria-live="polite"></div>
 <script src="app.js?v=14" defer></script>
+<script type="module" src="pompes-v15.js?v=15-preparation-readonly"></script>
 </body>
 </html>
