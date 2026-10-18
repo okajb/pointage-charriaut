@@ -58,7 +58,8 @@ const userProfile=()=>{
   }catch(e){return {name:'',email:''};}
 };
 const PILOT_MODE = false; // Cette branche lit les pompes réelles, sans modification autorisée.
-const REAL_WRITES_ENABLED = false; // Garde-fou V15 : activer uniquement après tests des règles et validation explicite.
+const REAL_WRITES_ENABLED = false; // Securite : aucune utilisation ni vidange de vraie pompe depuis cet apercu.
+const REAL_INIT_ENABLED = true; // Seule l'initialisation du suivi peut etre proposee a l'administrateur.
 async function createPilotPumps(){
   if(!PILOT_MODE){err(Error('La création de nouvelles pompes réelles est interdite depuis cette interface.'));return;}
   if(!state.isAdmin){err(Error('Réservé à l’administrateur.'));return;}
@@ -150,7 +151,7 @@ function render(){
   const hist=(state.events[id]||[]).slice().sort((a,b)=>ms(b.at)-ms(a.at)).slice(0,45);
   const legacy=(state.archives[id]||[]).slice().sort((a,b)=>a.sourceRow-b.sourceRow);
   const legacyMin=legacy.filter(e=>e.type==='usage').reduce((n,e)=>n+(e.durationMinutes||0),0);
-  $('pumpsContent').innerHTML='<div class="pump-user-line">Connecté : '+esc(state.user.email)+' · '+(PILOT_MODE?'APERÇU V15 / TEST':'POMPES RÉELLES · LECTURE SEULE')+' <button type="button" id="pumpLogout">Déconnexion</button></div>'+
+  $('pumpsContent').innerHTML='<div class="pump-user-line">Connecté : '+esc(state.user.email)+' · '+(PILOT_MODE?'APERÇU V15 / TEST':'POMPES RÉELLES · PRÉPARATION ADMIN')+' <button type="button" id="pumpLogout">Déconnexion</button></div>'+
   (!state.pumps.testo || !state.pumps.value?'<div class="pump-info"><p class="pump-muted">'+(PILOT_MODE?'Les compteurs de test sont à créer avant le premier essai.':'Document de pompe réelle absent : contacter l’administrateur.')+'</p>'+(PILOT_MODE&&state.isAdmin?'<button type="button" class="pump-action start" id="createPilotPumps">Créer les deux pompes de test</button>':'')+'</div>':'')+
   '<div class="pump-tabs">'+pick('testo')+pick('value')+'</div>'+
   '<section class="pump-counter '+cl+'" id="pumpCounter"><div class="pump-counter-top"><strong>'+p.name+'</strong><span id="pumpStatus">'+status+'</span></div><div class="pump-time"><span id="pumpElapsedTotal">'+dur(total)+'</span> <span class="pump-seconds" id="pumpElapsedSeconds">'+secPart(total)+'</span> <small>/ '+(d.oilIntervalHours||10)+' h</small></div><div class="pump-rail"><div id="pumpProgress" style="width:'+Math.min(100,100*total/interval)+'%"></div></div><small>'+(d.lastOilAt?'Dernière vidange réelle : '+dateTime(ms(d.lastOilAt)):'Date de la dernière vidange inconnue. Le zéro est uniquement le départ du suivi.')+'</small></section>'+
@@ -164,8 +165,10 @@ function render(){
   '<div class="pump-report"><label>Mois du relevé <input id="pumpsMonth" type="month" value="'+date(Date.now()).slice(0,7)+'"></label><button type="button" id="pumpPDF">Imprimer / PDF mensuel (2 pompes)</button></div>';
   if(!PILOT_MODE && !REAL_WRITES_ENABLED){
     const content=$('pumpsContent');
-    content.insertAdjacentHTML('afterbegin','<div class="pump-info"><strong>🔒 POMPES RÉELLES : CONSULTATION UNIQUEMENT</strong><p class="pump-muted">Aucun démarrage, arrêt ou remise à zéro ne peut être enregistré dans cet aperçu de préparation.</p></div>');
-    ['pumpInit','pumpStop','pumpOil'].forEach(buttonId=>{const button=$(buttonId);if(button)button.disabled=true;});
+    content.insertAdjacentHTML('afterbegin','<div class="pump-info"><strong>🔒 POMPES RÉELLES : UTILISATION ET VIDANGE BLOQUÉES</strong><p class="pump-muted">Seule l’initialisation du suivi à zéro, sans déclaration de vidange, est préparée pour le compte administrateur. Les boutons Départ, Fin et Vidange restent désactivés.</p></div>');
+    ['pumpStop','pumpOil'].forEach(buttonId=>{const button=$(buttonId);if(button)button.disabled=true;});
+    const initButton=$('pumpInit');
+    if(initButton && (!state.isAdmin || !REAL_INIT_ENABLED))initButton.disabled=true;
     const startButton=content.querySelector('#pumpStartForm button[type="submit"]');
     if(startButton)startButton.disabled=true;
   }
@@ -190,8 +193,11 @@ function err(e){
   message('Action non enregistrée : '+m,true);
   alert('Action non enregistrée.\n'+m);
 }
-async function requireRun(fn){
-  if(!PILOT_MODE && !REAL_WRITES_ENABLED){err(Error('Lecture seule : aucune action ne peut modifier les pompes réelles depuis cet aperçu.'));return;}
+async function requireRun(fn, operation='usage'){
+  if(!PILOT_MODE && !REAL_WRITES_ENABLED && !(operation==='init' && REAL_INIT_ENABLED && state.isAdmin)){
+    err(Error('Démarrage, arrêt et vidange des pompes réelles bloqués dans cet aperçu.'));
+    return;
+  }
   if(PILOT_MODE&&!state.isAdmin){err(Error('Essai réservé à l’administrateur. Les salariés auront accès après validation.'));return;}
   if(state.busy)return;
   state.busy=true;
@@ -249,6 +255,7 @@ async function finishSession(){
   });
 }
 async function initBaseline(){
+  if(!PILOT_MODE && !REAL_INIT_ENABLED){err(Error('Initialisation réelle non disponible.'));return;}
   if(!state.isAdmin){err(Error('Initialisation réservée à l’administrateur.'));return;}
   if(!confirm('Initialiser '+PUMPS[state.selected].name+' à 0 h 00 ? Cela ne valide AUCUNE vidange réelle et conserve les archives.'))return;
   await requireRun(async ()=>{
@@ -268,7 +275,7 @@ async function initBaseline(){
         lastActionAt:serverTimestamp()
       });
     });
-  });
+  }, 'init');
 }
 async function oilChange(){
   const observation=prompt('Observation sur la vidange (facultatif) :','');
