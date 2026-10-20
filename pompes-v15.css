@@ -1,0 +1,85 @@
+/* Module indépendant : aucun style du pointage existant n'est remplacé. */
+.pump-entry{display:flex;align-items:center;gap:12px;width:100%;margin-top:12px;padding:15px 16px;background:#fff;border:1px solid #c6dceb;border-radius:15px;color:#104c79;text-align:left;box-shadow:0 4px 12px #0b48760a}
+.pump-entry-icon{display:grid;place-items:center;width:43px;height:43px;border-radius:12px;background:#1372aa;color:white;font-size:22px}
+.pump-entry-text{display:flex;flex-direction:column;gap:3px;flex:1}.pump-entry-text strong{font-size:13px;font-weight:900}.pump-entry-text small{font-size:11px;color:#60849b}
+.pump-dialog{border:0;padding:0;width:min(96vw,650px);max-height:94vh;border-radius:21px;background:#f5f8fc;color:#17334d;box-shadow:0 20px 80px #092b4766}
+.pump-dialog::backdrop{background:#10283fba}
+.pump-layout{padding:17px;max-height:94vh;overflow:auto}
+.pump-header{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}.pump-header small{font-size:10px;font-weight:850;letter-spacing:1px;color:#3e7b9d}.pump-header h2{font-size:20px;margin:5px 0 12px}.pump-close{background:#fff;border:1px solid #cedee8;border-radius:10px;min-width:39px;min-height:39px;color:#31546e}
+.pump-local-warning{font-size:12px;line-height:1.4;padding:10px 12px;margin:4px 0 14px;background:#fff7e8;border:1px solid #f4daaa;color:#725016;border-radius:10px}
+.pump-tabs{display:grid;grid-template-columns:1fr 1fr;gap:9px}.pump-tab{text-align:left;padding:13px;border:2px solid #d6e5ef;border-radius:13px;background:#fff;color:#21425e}.pump-tab strong{display:block;font-size:17px}.pump-tab small{display:block;font-size:10px;margin-top:3px}.pump-tab.orange.selected{border-color:#ed953f;background:#fff8f0}.pump-tab.blue.selected{border-color:#3a83d6;background:#f0f7ff}
+.pump-counter{padding:15px;margin-top:12px;border-radius:14px;background:#e9f7f2;border:1px solid #bce6d6}.pump-counter.soon{background:#fff4e2;border-color:#e8ca86}.pump-counter.overdue{background:#fff0ef;border-color:#eea6a0}
+.pump-time{display:flex;align-items:baseline;flex-wrap:wrap;gap:0 6px;font-variant-numeric:tabular-nums;line-height:1.2}
+.pump-seconds{font-size:20px;white-space:nowrap;color:#286887;font-weight:850}
+.pump-session-time{font-size:13px;font-weight:650;color:#145b83;background:#eff9ff;padding:10px;border-radius:8px;font-variant-numeric:tabular-nums}
+.pump-session-time strong{font-size:18px;white-space:nowrap}
+@media(max-width:420px){.pump-time{font-size:26px}.pump-seconds{font-size:18px}}
+.pump-counter-top{display:flex;justify-content:space-between;gap:8px;font-size:12px}.pump-counter-top span{font-weight:800}.pump-time{font-size:30px;font-weight:900;margin:12px 0}.pump-time small{font-size:13px;color:#59738b;font-weight:600}.pump-counter>small{font-size:11px;color:#63798a}.pump-rail{height:10px;background:#d6e1e8;border-radius:99px;overflow:hidden;margin:9px 0}.pump-rail div{height:100%;background:#31a773;border-radius:99px}.pump-counter.soon .pump-rail div{background:#d99522}.pump-counter.overdue .pump-rail div{background:#d7504c}
+.pump-info,.pump-history,.pump-report{background:#fff;border:1px solid #dae6ed;border-radius:13px;padding:13px;margin-top:12px}.pump-active{font-size:13px;font-weight:850;color:#c96710}.pump-muted{font-size:12px;color:#637b8e;line-height:1.4}
+.pump-fields{display:grid;grid-template-columns:1fr 1fr;gap:11px}.pump-fields label,.pump-report label{display:flex;flex-direction:column;gap:5px;font-size:12px;font-weight:780}.pump-fields label:last-child{grid-column:1/-1}.pump-fields select,.pump-fields input,.pump-fields textarea,.pump-report input{width:100%;padding:11px;border-radius:9px;border:1px solid #ccdae3;background:#fff;color:#143b58;font-size:15px}
+.pump-action{display:block;width:100%;padding:14px;margin:12px 0 8px;border:0;border-radius:11px;color:#fff;font-weight:900;background:#19896a}.pump-action.finish{background:#cb502f}
+.pump-oil{display:block;width:100%;border:1px solid #e3c489;background:#fff8e7;padding:11px;border-radius:10px;color:#7d5514;font-weight:800;font-size:12px}.pump-oil:disabled{opacity:.45}
+.pump-history-head{display:flex;align-items:center;justify-content:space-between;gap:8px}.pump-history-head h3{margin:0;font-size:15px}.pump-history-head span{font-size:10px;color:#728596}.pump-events{max-height:270px;overflow:auto;margin-top:10px}.pump-event{border-top:1px solid #e7eef2;padding:10px 0;display:flex;justify-content:space-between;gap:10px}.pump-event span{display:flex;flex-direction:column;gap:2px}.pump-event strong,.pump-event b{font-size:12px}.pump-event small{font-size:11px;color:#6d8494;overflow-wrap:anywhere}
+.pump-report{display:flex;align-items:end;gap:12px;justify-content:space-between}.pump-report button{border:0;border-radius:9px;background:#105a8c;color:#fff;padding:12px;font-size:12px;font-weight:850}
+#pumpsPrintSheet{display:none}
+@media(max-width:420px){.pump-fields{grid-template-columns:1fr}.pump-report{flex-direction:column;align-items:stretch}}
+@media print{body.pumps-print .shell,body.pumps-print dialog,body.pumps-print #toast,body.pumps-print #printSheet{display:none!important}
+body.pumps-print #pumpsPrintSheet{display:block!important;position:static;background:white;color:#111}
+body.pumps-print .pump-print{font-family:Arial,sans-serif;font-size:9pt}.pump-print h1{font-size:18pt;margin:0 0 7px}.pump-print-summary{padding:9px;background:#eef4f8;margin:10px 0}.pump-print table{width:100%;border-collapse:collapse;table-layout:fixed}.pump-print th,.pump-print td{border:1px solid #9aa9b7;text-align:left;padding:7px 5px;overflow-wrap:anywhere}.pump-print th{background:#e7eef5}.pump-print td:last-child{width:26%}.pump-foot{font-size:8pt;color:#555;margin-top:15px}
+@page{size:A4 landscape;margin:12mm}}
+.pump-login-label{display:flex;flex-direction:column;gap:7px;font-size:13px;font-weight:800}
+.pump-login-label input{font-size:16px;padding:12px;border:1px solid #cbdde9;border-radius:9px;max-width:100%}
+.pump-message{margin:8px 0;padding:10px 12px;border:1px solid #aad7e8;color:#155577;background:#edf9ff;border-radius:10px;font-size:12px;line-height:1.35}
+.pump-message.error{color:#8d3327;border-color:#fac1b8;background:#fff2ef}
+.pump-user-line{display:flex;align-items:center;justify-content:space-between;gap:7px;font-size:11px;color:#5e7689;overflow-wrap:anywhere;margin-bottom:9px}
+.pump-user-line button{border:1px solid #d2e0e9;background:white;padding:7px;border-radius:8px;font-size:11px;color:#19507e}
+
+@media print {
+  html,body{background:#fff!important;margin:0!important;padding:0!important}
+  body.pumps-print > main{display:none!important}
+  body.pumps-print > *:not(#pumpsPrintSheet){display:none!important}
+  body.pumps-print #pumpsPrintSheet{display:block!important;position:static!important;width:100%!important;margin:0!important;padding:0!important}
+  body.pumps-print #pumpsPrintSheet tr{break-inside:avoid!important}
+}
+
+/* V15 de TEST : relevé pompes mensuel dense en A4 paysage (sans toucher à la V14). */
+@media print {
+  @page { size: A4 landscape; margin: 7mm; }
+  body.pumps-print #pumpsPrintSheet .pump-print {
+    font-family: Arial, sans-serif;
+    font-size: 8.3pt;
+    line-height: 1.16;
+  }
+  body.pumps-print #pumpsPrintSheet .pump-print h1 {
+    font-size: 15pt;
+    line-height: 1.15;
+    margin: 0 0 3px;
+  }
+  body.pumps-print #pumpsPrintSheet .pump-print > p:not(.pump-foot) {
+    margin: 2px 0 4px;
+  }
+  body.pumps-print #pumpsPrintSheet .pump-print-summary {
+    padding: 5px 7px;
+    margin: 5px 0 7px;
+  }
+  body.pumps-print #pumpsPrintSheet .pump-print-summary p {
+    margin: 2px 0 0;
+  }
+  body.pumps-print #pumpsPrintSheet .pump-print th,
+  body.pumps-print #pumpsPrintSheet .pump-print td {
+    padding: 3px 4px;
+    font-size: 8pt;
+    line-height: 1.14;
+    vertical-align: top;
+  }
+  body.pumps-print #pumpsPrintSheet .pump-print th { font-weight: 700; }
+  body.pumps-print #pumpsPrintSheet .pump-print .pump-foot {
+    font-size: 7.3pt;
+    line-height: 1.16;
+    margin: 6px 0 0;
+  }
+  body.pumps-print #pumpsPrintSheet tr { break-inside: avoid; }
+}
+
+/* Lecture seule : actions de l'aperçu visiblement indisponibles, sans ambiguïté. */
+.pump-action:disabled{opacity:1!important;background:#dce5eb!important;color:#516979!important;cursor:not-allowed!important;box-shadow:none!important;border:1px solid #c5d5df!important}
