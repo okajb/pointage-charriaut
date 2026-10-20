@@ -1,6 +1,6 @@
-/* CHARRIAUT – préparation module pompes à vide réelles V15
-   Branche séparée : aucune modification du pointage V14 ni déploiement sur main.
-   Sessions et vidanges partagées via Firestore. Pas d'écriture hors ligne. */
+/* CHARRIAUT V15 – module des pompes réelles TESTO et VALUE.
+   Pointages V14 conservés en local. Sessions et vidanges partagées via Firestore.
+   Les compteurs réels sont initialisés : pas de remise à zéro de départ. */
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js';
 import {
   getAuth,onAuthStateChanged,sendSignInLinkToEmail,isSignInWithEmailLink,
@@ -59,9 +59,9 @@ const userProfile=()=>{
     };
   }catch(e){return {name:'',email:''};}
 };
-const PILOT_MODE = false; // Cette branche lit les pompes réelles, sans modification autorisée.
-const REAL_WRITES_ENABLED = false; // Securite : aucune utilisation ni vidange de vraie pompe depuis cet apercu.
-const REAL_INIT_ENABLED = false; // TEST PREPARATOIRE : vrais compteurs déjà initialisés, toute écriture désactivée.
+const PILOT_MODE = false; // Les deux pompes réelles, jamais les pompes de test.
+const REAL_WRITES_ENABLED = true; // Utilisation et vidange des vraies pompes autorisées par les règles Firebase.
+const REAL_INIT_ENABLED = false; // Initialisation réelle déjà effectuée séparément, jamais disponible ici.
 async function createPilotPumps(){
   if(!PILOT_MODE){err(Error('La création de nouvelles pompes réelles est interdite depuis cette interface.'));return;}
   if(!state.isAdmin){err(Error('Réservé à l’administrateur.'));return;}
@@ -153,7 +153,7 @@ function render(){
   const hist=(state.events[id]||[]).slice().sort((a,b)=>ms(b.at)-ms(a.at)).slice(0,45);
   const legacy=(state.archives[id]||[]).slice().sort((a,b)=>a.sourceRow-b.sourceRow);
   const legacyMin=legacy.filter(e=>e.type==='usage').reduce((n,e)=>n+(e.durationMinutes||0),0);
-  $('pumpsContent').innerHTML='<div class="pump-user-line">Connecté : '+esc(state.user.email)+' · '+(PILOT_MODE?'APERÇU V15 / TEST':'POMPES RÉELLES · CONSULTATION')+' <button type="button" id="pumpLogout">Déconnexion</button></div>'+
+  $('pumpsContent').innerHTML='<div class="pump-user-line">Connecté : '+esc(state.user.email)+' · '+(PILOT_MODE?'APERÇU V15 / TEST':'POMPES RÉELLES · SUIVI ACTIF')+' <button type="button" id="pumpLogout">Déconnexion</button></div>'+
   (!state.pumps.testo || !state.pumps.value?'<div class="pump-info"><p class="pump-muted">'+(PILOT_MODE?'Les compteurs de test sont à créer avant le premier essai.':'Document de pompe réelle absent : contacter l’administrateur.')+'</p>'+(PILOT_MODE&&state.isAdmin?'<button type="button" class="pump-action start" id="createPilotPumps">Créer les deux pompes de test</button>':'')+'</div>':'')+
   '<div class="pump-tabs">'+pick('testo')+pick('value')+'</div>'+
   '<section class="pump-counter '+cl+'" id="pumpCounter"><div class="pump-counter-top"><strong>'+p.name+'</strong><span id="pumpStatus">'+status+'</span></div><div class="pump-time"><span id="pumpElapsedTotal">'+dur(total)+'</span> <span class="pump-seconds" id="pumpElapsedSeconds">'+secPart(total)+'</span> <small>/ '+(d.oilIntervalHours||10)+' h</small></div><div class="pump-rail"><div id="pumpProgress" style="width:'+Math.min(100,100*total/interval)+'%"></div></div><small>'+(d.lastOilAt?'Dernière vidange réelle : '+dateTime(ms(d.lastOilAt)):'Date de la dernière vidange inconnue. Le zéro est uniquement le départ du suivi.')+'</small></section>'+
@@ -306,7 +306,7 @@ async function initBaseline(){
 async function oilChange(){
   const observation=prompt('Observation sur la vidange (facultatif) :','');
   if(observation===null)return;
-  if(!confirm('Confirmer la vidange et remettre le compteur à zéro ? L’historique restera enregistré.'))return;
+  if(!confirm('Confirmer qu’une VRAIE vidange d’huile vient d’être effectuée sur '+PUMPS[state.selected].name+' ?\n\nCette action remettra son compteur des 10 heures à zéro. L’historique restera enregistré.'))return;
   await requireRun(async name=>{
     const id=state.selected,eventRef=doc(collection(refs(id),'events'));
     await runTransaction(db,async tx=>{
