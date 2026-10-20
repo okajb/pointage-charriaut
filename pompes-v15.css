@@ -80,3 +80,6 @@ body.pumps-print .pump-print{font-family:Arial,sans-serif;font-size:9pt}.pump-pr
   }
   body.pumps-print #pumpsPrintSheet tr { break-inside: avoid; }
 }
+
+/* Lecture seule : actions de l'aperçu visiblement indisponibles, sans ambiguïté. */
+.pump-action:disabled{opacity:1!important;background:#dce5eb!important;color:#516979!important;cursor:not-allowed!important;box-shadow:none!important;border:1px solid #c5d5df!important}
