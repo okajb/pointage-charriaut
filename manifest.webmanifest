@@ -1,7 +1,7 @@
 {
-  "name": "CHARRIAUT – Pointage équipe",
+  "name": "CHARRIAUT – Pointage et Pompes",
   "short_name": "CHARRIAUT",
-  "description": "Pointage individuel des salariés CHARRIAUT. Relevé mensuel PDF, historique, 39 h et sauvegarde locale.",
+  "description": "Pointage des heures et suivi des pompes à vide TESTO et VALUE pour l’équipe CHARRIAUT. Relevés mensuels PDF et sauvegardes locales.",
   "lang": "fr-FR",
   "start_url": "./index.html",
   "scope": "./",
