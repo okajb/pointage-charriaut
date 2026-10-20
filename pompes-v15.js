@@ -168,11 +168,15 @@ function render(){
   if(!PILOT_MODE && !REAL_WRITES_ENABLED){
     const content=$('pumpsContent');
     content.insertAdjacentHTML('afterbegin','<div class="pump-info"><strong>🔒 POMPES RÉELLES : UTILISATION ET VIDANGE BLOQUÉES</strong><p class="pump-muted">Aucune écriture n’est activée pour cette préparation intégrée au pointage. Départ, Fin, Vidange et Initialisation restent désactivés.</p></div>');
-    ['pumpStop','pumpOil'].forEach(buttonId=>{const button=$(buttonId);if(button)button.disabled=true;});
+    // Les boutons bloqués doivent aussi paraître bloqués : ne jamais inviter à démarrer une vraie pompe.
+    const stopButton=$('pumpStop');
+    if(stopButton){stopButton.disabled=true;stopButton.textContent='🔒 FIN D’UTILISATION — INDISPONIBLE';}
+    const oilButton=$('pumpOil');
+    if(oilButton){oilButton.disabled=true;oilButton.textContent='🔒 VIDANGE — INDISPONIBLE';}
     const initButton=$('pumpInit');
-    if(initButton && (!state.isAdmin || !REAL_INIT_ENABLED))initButton.disabled=true;
+    if(initButton){initButton.disabled=true;initButton.textContent='🔒 INITIALISATION — INDISPONIBLE';}
     const startButton=content.querySelector('#pumpStartForm button[type="submit"]');
-    if(startButton)startButton.disabled=true;
+    if(startButton){startButton.disabled=true;startButton.textContent='🔒 DÉPART — INDISPONIBLE';}
   }
   tickLive();
 }
