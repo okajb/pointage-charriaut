@@ -13,6 +13,10 @@
 <link rel="apple-touch-icon" href="../assets/icon-180.png">
 <link rel="stylesheet" href="../styles.css?v=14">
 <link rel="stylesheet" href="../apercu-v15/pompes.css?v=15integration-preview">
+<style>
+/* Prévisualisation : vrais compteurs en consultation seule. */
+.pump-action:disabled{opacity:1!important;background:#dce5eb!important;color:#516979!important;cursor:not-allowed!important;box-shadow:none!important;border:1px solid #c5d5df!important}
+</style>
 <title>CHARRIAUT · V15 réunifiée — Prévisualisation sans écriture réelle</title>
 </head>
 <body>
@@ -172,6 +176,6 @@
 <section class="print-sheet" id="printSheet" aria-hidden="true"></section>
 <div id="toast" role="status" aria-live="polite"></div>
 <script src="./app.js?v=15integration-preview" defer></script>
-<script type="module" src="./pompes.js?v=15integration-preview"></script>
+<script type="module" src="./pompes.js?v=15integration-readonly-20261020"></script>
 </body>
 </html>
