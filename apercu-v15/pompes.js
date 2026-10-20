@@ -7,7 +7,7 @@ import {
   signInWithEmailLink,signOut
 } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js';
 import {
-  getFirestore,doc,collection,getDoc,onSnapshot,runTransaction,
+  getFirestore,doc,collection,getDoc,getDocFromServer,onSnapshot,runTransaction,
   serverTimestamp,Timestamp
 } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
 
@@ -154,7 +154,7 @@ function render(){
   '<div class="pump-tabs">'+pick('testo')+pick('value')+'</div>'+
   '<section class="pump-counter '+cl+'" id="pumpCounter"><div class="pump-counter-top"><strong>'+p.name+'</strong><span id="pumpStatus">'+status+'</span></div><div class="pump-time"><span id="pumpElapsedTotal">'+dur(total)+'</span> <span class="pump-seconds" id="pumpElapsedSeconds">'+secPart(total)+'</span> <small>/ '+(d.oilIntervalHours||10)+' h</small></div><div class="pump-rail"><div id="pumpProgress" style="width:'+Math.min(100,100*total/interval)+'%"></div></div><small>'+(d.lastOilAt?'Dernière vidange enregistrée (TEST) : '+dateTime(ms(d.lastOilAt)):'Date de la dernière vidange inconnue. Le zéro est uniquement le départ du suivi.')+'</small></section>'+
   (!initialized?'<div class="pump-info"><p class="pump-muted">Le nouvel historique commence à zéro, sans déclaration de vidange d’huile.</p>'+(state.isAdmin?'<button type="button" id="pumpInit" class="pump-action start">Initialiser le suivi à 0 h 00</button>':'<p class="pump-muted">En attente de l’initialisation par un administrateur.</p>')+'</div>':'')+
-  (run?'<div class="pump-info"><p class="pump-active">⏱ En cours depuis '+(ms(run.startedAt)?dateTime(ms(run.startedAt)):'quelques instants')+' · '+esc(run.byName)+'</p><p class="pump-session-time">Temps de cette utilisation : <strong id="pumpLiveSession">'+durPrecise(liveSeconds(id).active)+'</strong></p><p class="pump-muted">Fluide : '+esc(run.gas)+' · '+esc(run.job)+'</p><button type="button" class="pump-action finish" id="pumpStop">■ FIN D’UTILISATION</button></div>':
+  (run?'<div class="pump-info"><p class="pump-active">⏱ En cours depuis '+(ms(run.startedAt)?dateTime(ms(run.startedAt)):'quelques instants')+' · '+esc(run.byName)+'</p><p class="pump-session-time">Temps de cette utilisation : <strong id="pumpLiveSession">'+durPrecise(liveSeconds(id).active)+'</strong></p><p class="pump-muted">Fluide : '+esc(run.gas)+' · '+esc(run.job)+'</p><button type="button" class="pump-action finish" id="pumpStop" '+(!ms(run.startedAt)||state.busy?'disabled':'')+'>'+(ms(run.startedAt)?'■ FIN D’UTILISATION':'Synchronisation du départ…')+'</button></div>':
   '<form class="pump-info" id="pumpStartForm"><div class="pump-fields"><label>Nature du fluide / gaz<select name="gas" required><option>R32</option><option>R410A</option><option>AZOTE</option><option>AZOTE HYDROGÉNÉ</option><option value="AUTRE">Autre</option></select></label><label>Si autre : préciser<input name="other" maxlength="80" placeholder="Gaz utilisé"></label><label>Opération<select name="job"><option>Tirage au vide</option><option>Contrôle</option><option>Entretien</option><option>Autre intervention</option></select></label><label>Observation<textarea name="note" maxlength="600" rows="2" placeholder="Chantier, remarque..."></textarea></label></div><button type="submit" class="pump-action start" '+(initialized?'':'disabled title="Effectuer et enregistrer la vidange initiale"')+'>▶ DÉPART</button>'+(initialized?'':'<p class="pump-muted">L’administrateur doit initialiser le nouveau suivi avant le démarrage.</p>')+'</form>')+
   '<div class="pump-info"><button class="pump-oil" id="pumpOil" '+(run||!initialized?'disabled':'')+' type="button">✓ Vidange effectuée — remettre le compteur à zéro</button><p class="pump-muted">Chaque utilisation et vidange est enregistrée dans l’historique partagé, avec le compte du salarié.</p></div>'+
   '<section class="pump-history"><div class="pump-history-head"><h3>Historique '+p.name+'</h3><span>'+hist.length+' opérations affichées</span></div>'+
@@ -186,23 +186,27 @@ async function requireRun(fn){
   if(PILOT_MODE&&!state.isAdmin){err(Error('Essai réservé à l’administrateur. Les salariés auront accès après validation.'));return;}
   if(state.busy)return;
   state.busy=true;
+  ['pumpStop','pumpOil','pumpInit'].forEach(id=>{const button=$(id);if(button)button.disabled=true;});
+  const startButton=$('pumpStartForm')?.querySelector('button[type="submit"]');
+  if(startButton)startButton.disabled=true;
   try{
     if(!navigator.onLine)throw Error('Connexion internet indispensable pour démarrer, arrêter ou enregistrer une vidange.');
     if(!authReady())throw Error('Connecte-toi d’abord.');
     const name=readyName();
-    await fn(name);
-    message('Opération enregistrée et partagée.');
+    const result=await fn(name);
+    message(result?.alreadyStopped?'Cette utilisation avait déjà été arrêtée depuis un autre appareil. Compteur actualisé.':'Opération enregistrée et partagée.');
   }catch(e){err(e);}
-  finally{state.busy=false;}
+  finally{state.busy=false;render();}
 }
 async function startSession(fd){
   const gas=fd.get('gas')==='AUTRE'?String(fd.get('other')||'').trim():String(fd.get('gas')||'').trim();
   if(!gas||gas.length>80)throw Error('Précise le fluide.');
   const job=String(fd.get('job')||'').slice(0,80);
   const note=String(fd.get('note')||'').trim().slice(0,600);
+  const id=state.selected;
   await requireRun(async name=>{
     await runTransaction(db,async tx=>{
-      const pump=refs(state.selected);
+      const pump=refs(id);
       const snap=await tx.get(pump);
       if(!snap.exists())throw Error('Pompe absente de la base.');
       if(snap.data().activeSession)throw Error('Cette pompe est déjà en cours d’utilisation.');
@@ -215,15 +219,22 @@ async function startSession(fd){
   });
 }
 async function finishSession(){
+  const id=state.selected;
+  const visibleSession=state.pumps[id]?.activeSession;
+  if(visibleSession && !ms(visibleSession.startedAt)){
+    err(Error('Démarrage encore en cours de synchronisation. Patiente quelques secondes avant de terminer.'));
+    return;
+  }
   await requireRun(async name=>{
-    const id=state.selected;
     const eventRef=doc(collection(refs(id),'events'));
-    await runTransaction(db,async tx=>{
+    const result=await runTransaction(db,async tx=>{
       const pump=refs(id),snap=await tx.get(pump);
       if(!snap.exists())throw Error('Pompe inconnue.');
-      const prev=snap.data(),s=prev.activeSession;
-      if(!s||!ms(s.startedAt))throw Error('Aucune session à arrêter. Réessaie après la synchronisation.');
-      const seconds=Math.max(1,Math.round((Date.now()-ms(s.startedAt))/1000));
+      const prev=snap.data(),session=prev.activeSession;
+      if(!session)return {alreadyStopped:true};
+      const started=ms(session.startedAt);
+      if(!started)throw Error('Heure de départ encore non confirmée. Réessaie dans quelques secondes.');
+      const seconds=Math.max(1,Math.round((Date.now()-started)/1000));
       if(seconds>48*3600)throw Error('Utilisation de plus de 48 heures : vérifier le compteur avec un responsable.');
       tx.update(pump,{
         activeSession:null,usedSeconds:(prev.usedSeconds||0)+seconds,
@@ -231,12 +242,18 @@ async function finishSession(){
         lastEventId:eventRef.id,lastActionAt:serverTimestamp()
       });
       tx.set(eventRef,{
-        type:'usage',at:serverTimestamp(),startedAt:s.startedAt,
-        person:s.byName,byEmail:s.byEmail,byUid:s.byUid,
+        type:'usage',at:serverTimestamp(),startedAt:session.startedAt,
+        person:session.byName,byEmail:session.byEmail,byUid:session.byUid,
         endedBy:name,endedByUid:state.user.uid,
-        gas:s.gas,job:s.job,note:s.note,seconds
+        gas:session.gas,job:session.job,note:session.note,seconds
       });
+      return {alreadyStopped:false};
     });
+    if(result?.alreadyStopped){
+      const fresh=await getDocFromServer(refs(id));
+      if(fresh.exists())state.pumps[id]=fresh.data();
+    }
+    return result;
   });
 }
 async function initBaseline(){
