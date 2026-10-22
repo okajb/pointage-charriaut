@@ -4,7 +4,7 @@
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js';
 import {
   getAuth,onAuthStateChanged,sendSignInLinkToEmail,isSignInWithEmailLink,
-  signInWithEmailLink,signOut
+  signInWithEmailLink,signOut,setPersistence,browserLocalPersistence
 } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js';
 import {
   getFirestore,doc,collection,getDoc,getDocFromServer,onSnapshot,runTransaction,
@@ -21,6 +21,14 @@ const cfg={
 };
 const app=initializeApp(cfg); // Auth partagée avec les pages de test sur ce domaine
 const auth=getAuth(app);
+// Chaque appareil garde sa propre session jusqu'à une déconnexion explicite.
+// Safari et les PWA iOS ont des espaces de stockage différents.
+const authPersistenceReady=setPersistence(auth,browserLocalPersistence).then(()=>true).catch(()=>false);
+const requirePersistentAuth=async()=>{
+  if(!await authPersistenceReady){
+    throw Error('Impossible de mémoriser la connexion sur cet appareil. Vérifie que le stockage local est autorisé.');
+  }
+};
 const db=getFirestore(app);
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]));
@@ -36,7 +44,7 @@ const durPrecise=s=>dur(s)+' '+secPart(s);
 const durRecord=s=>{const n=Math.max(0,Math.floor(Number(s)||0)); return dur(n)+(n%60?' '+pad(n%60)+' s':'');};
 const ms=ts=>ts?.toMillis?.()??0;
 const PUMPS={testo:{name:'TESTO',color:'orange'},value:{name:'VALUE',color:'blue'}};
-const state={selected:'testo',user:null,approved:false,isAdmin:false,pumps:{},events:{testo:[],value:[]},archives:{testo:[],value:[]},unsub:[],busy:false};
+const state={selected:'testo',user:null,approved:false,isAdmin:false,authInitializing:true,authChecking:false,pumps:{},events:{testo:[],value:[]},archives:{testo:[],value:[]},unsub:[],busy:false};
 const REFRESH_AFTER_STALE_STOP = true; // Resynchronisation après un arrêt déjà fait sur un autre appareil.
 const modal=document.createElement('dialog');
 modal.id='pumpsDialog';
@@ -130,12 +138,19 @@ function tickLive(){
 }
 function render(){
   if(!modal.open)return;
+  if(state.authInitializing || state.authChecking){
+    $('pumpsContent').innerHTML='<div class="pump-info"><p>Vérification de ta connexion CHARRIAUT…</p></div>';
+    return;
+  }
   if(!authReady()){
     const email=userProfile().email;
     const authState=state.user?'<p>Connecté : <strong>'+esc(state.user.email)+'</strong>. '+(state.approved?'':'Compte non autorisé ou e-mail non vérifié.')+'</p>':'<p>Pour consulter les compteurs communs, connecte-toi une fois grâce au lien envoyé par e-mail.</p>';
     $('pumpsContent').innerHTML='<div class="pump-info">'+authState+
       '<form id="pumpLoginForm"><label class="pump-login-label">Adresse e-mail du salarié<input type="email" id="pumpLoginEmail" required value="'+esc(email)+'" placeholder="prenom.nom@exemple.fr"></label><button type="submit" class="pump-action start">Recevoir mon lien de connexion</button></form>'+
-      '<p class="pump-muted">Connexion sans mot de passe. Le projet gratuit Spark limite l’envoi à 5 liens par jour. Le lien doit être ouvert sur ce téléphone, idéalement dans le même navigateur.</p></div>';
+      '<p class="pump-muted">Connexion individuelle à faire une seule fois par appareil. Une fois connecté, tu restes reconnu sur cet appareil, sauf déconnexion ou suppression des données.</p>'+
+      '<div class="pump-login-help"><strong>Application installée sur iPhone ?</strong><p>Dans l’e-mail reçu, copie l’adresse du lien de connexion <strong>sans l’ouvrir dans Safari</strong>, puis reviens ici et colle-la ci-dessous. Sur ordinateur ou navigateur classique, tu peux cliquer directement sur le lien.</p></div>'+
+      '<form id="pumpCompleteLoginForm"><label class="pump-login-label">Lien reçu par e-mail<input type="text" id="pumpOneTimeLink" required autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Colle ici le lien du mail"></label><button type="submit" class="pump-action start">Valider ma connexion sur cet appareil</button></form>'+
+      '<p class="pump-muted">Chaque collègue utilise sa propre adresse autorisée. Pour un nouvel appareil, une validation initiale sera nécessaire.</p></div>';
     return;
   }
   const id=state.selected,p=PUMPS[id],d=state.pumps[id]||{},run=d.activeSession;
@@ -375,10 +390,25 @@ $('pumpsContent').addEventListener('submit',async event=>{
     const email=String($('pumpLoginEmail').value||'').trim().toLowerCase();
     if(!email||!email.includes('@'))return;
     try{
+      await requirePersistentAuth();
       await sendSignInLinkToEmail(auth,email,{url:'https://okajb.github.io/pointage-charriaut/',handleCodeInApp:true});
       localStorage.setItem('charriaut.pompes.loginEmail',email);
-      message('Lien envoyé. Ouvre-le depuis ton téléphone. Il peut être nécessaire de revenir au navigateur.');
+      message('Lien envoyé. Sur iPhone avec l’application installée, copie son adresse depuis ton mail sans ouvrir le lien, puis colle-la dans CHARRIAUT.');
     }catch(e){err(e);}
+  }
+  if(event.target.id==='pumpCompleteLoginForm'){
+    event.preventDefault();
+    const link=String($('pumpOneTimeLink')?.value||'').trim();
+    const email=localStorage.getItem('charriaut.pompes.loginEmail')||userProfile().email;
+    try{
+      if(!email)throw Error('Renseigne ton adresse e-mail dans le profil CHARRIAUT.');
+      if(!isSignInWithEmailLink(auth,link))throw Error('Le texte collé n’est pas un lien Firebase de connexion valide.');
+      await requirePersistentAuth();
+      await signInWithEmailLink(auth,email,link);
+      localStorage.removeItem('charriaut.pompes.loginEmail');
+      message('Connexion mémorisée sur cet appareil.');
+    }catch(e){message('Connexion impossible : '+String(e.message||e),true);}
+    return;
   }
   if(event.target.id==='pumpStartForm'){
     event.preventDefault();
@@ -386,7 +416,8 @@ $('pumpsContent').addEventListener('submit',async event=>{
   }
 });
 onAuthStateChanged(auth,async user=>{
-  stopListening();state.user=user;state.approved=false;state.isAdmin=false;render();
+  stopListening();state.user=user;state.approved=false;state.isAdmin=false;
+  state.authInitializing=false;state.authChecking=!!user;render();
   if(!user)return;
   try{
     const email=String(user.email||'').toLowerCase();
@@ -396,13 +427,14 @@ onAuthStateChanged(auth,async user=>{
     state.approved=true;
     state.isAdmin=record.data().role==='admin';
     startListening();
-  }catch(e){message(e.message,true);}finally{render();}
+  }catch(e){message(e.message,true);}finally{state.authChecking=false;render();}
 });
 (async()=>{
   if(!isSignInWithEmailLink(auth,window.location.href))return;
   const email=localStorage.getItem('charriaut.pompes.loginEmail')||prompt('Confirme ton adresse e-mail pour terminer la connexion :');
   if(!email)return;
   try{
+    await requirePersistentAuth();
     await signInWithEmailLink(auth,email,window.location.href);
     localStorage.removeItem('charriaut.pompes.loginEmail');
     history.replaceState(null,'',window.location.origin+window.location.pathname);
