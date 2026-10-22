@@ -83,3 +83,12 @@ body.pumps-print .pump-print{font-family:Arial,sans-serif;font-size:9pt}.pump-pr
 
 /* Lecture seule : actions de l'aperçu visiblement indisponibles, sans ambiguïté. */
 .pump-action:disabled{opacity:1!important;background:#dce5eb!important;color:#516979!important;cursor:not-allowed!important;box-shadow:none!important;border:1px solid #c5d5df!important}
+
+/* Connexion individuelle par mot de passe : affichage adapté aux iPhone et Android. */
+.pump-login-label{margin:12px 0 8px}
+.pump-login-label input{display:block;box-sizing:border-box;width:100%;min-width:0;background:white;color:#17334d}
+.pump-info h3{font-size:18px;margin:0 0 12px;color:#17334d}
+.pump-link-button{display:block;width:100%;padding:10px 8px;margin-top:9px;border:1px solid #d3e3ed;border-radius:9px;background:#f2f8fd;color:#0b507c;font-size:13px;font-weight:700;text-align:center;overflow-wrap:anywhere}
+.pump-info .pump-action:disabled{opacity:.65;cursor:wait}
+.pump-user-line{flex-wrap:wrap}
+.pump-user-line button{font-size:12px;padding:8px}
